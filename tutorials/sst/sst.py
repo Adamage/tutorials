@@ -27,8 +27,8 @@ def cli(source: Path, output: Path, type: OutputTypes, execute: bool) -> None:
 
     filename = create_filename(exporter, output, source)
 
-    with open(filename, "w") as fpout:
-        fpout.write(output_content)
+    filename.parent.mkdir(parents=True, exist_ok=True)
+    filename.write_text(output_content)
 
 
 def create_filename(exporter: Exporter, output: Path, source: Path) -> str:
@@ -39,4 +39,4 @@ def create_filename(exporter: Exporter, output: Path, source: Path) -> str:
 
 
 if __name__ == '__main__':
-    cli()
+    cli()  # pragma: no cover

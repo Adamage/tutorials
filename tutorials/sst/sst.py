@@ -8,6 +8,13 @@ from src.format_converter import py_to_ipynb
 from src.output_types import OutputTypes, supported_types
 
 
+def construct_output_filename(outputname: Path, extension: str, input_name: Path) -> Path:
+    filename = str(outputname) + extension
+    assert not filename == str(input_name), f'Your source file and the expected output file name are the same: ' \
+                                            f'{input_name}, specify different outfile name using --output flag.'
+    return Path(filename)
+
+
 @click.command()
 @click.option('--source', '-s', required=True, type=Path,
               help='Absolute or relative path to python file to be converted')
@@ -25,17 +32,17 @@ def cli(source: Path, output: Path, type: OutputTypes, execute: bool) -> None:
     exporter = exporter_factory(type=type, execute_enabled=execute)
     output_content, _ = exporter.from_notebook_node(notebook)
 
-    filename = create_filename(exporter, output, source)
+    filename = construct_output_filename(outputname=output, extension=exporter.file_extension, input_name=source)
 
     filename.parent.mkdir(parents=True, exist_ok=True)
     filename.write_text(output_content)
 
 
-def create_filename(exporter: Exporter, output: Path, source: Path) -> str:
+def create_filename(exporter: Exporter, output: Path, source: Path) -> Path:
     filename = str(output) + exporter.file_extension
     assert not filename == str(source), f'Your source file and the expected output file name are the same: {source}, ' \
                                         f'specify different outfile name using --output flag.'
-    return filename
+    return Path(filename)
 
 
 if __name__ == '__main__':

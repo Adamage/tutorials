@@ -91,13 +91,6 @@ def remove_from_cell_source(cell: NotebookNode, string_to_remove: str) -> Notebo
     return cell
 
 
-def construct_output_filename(outputname: Path, extension: str, input_name: Path) -> Path:
-    filename = str(outputname) + extension
-    assert not filename == str(input_name), f'Your source file and the expected output file name are the same: ' \
-                                            f'{input_name}, specify different outfile name using --output flag.'
-    return Path(filename)
-
-
 def set_output_extension_and_type(output: Path, type: OutputTypes) -> Tuple[Path, OutputTypes]:
     """
     If output without extension but specified type -> add extension to output

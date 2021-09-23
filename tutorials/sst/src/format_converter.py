@@ -1,12 +1,13 @@
 import os
 from enum import Enum
 from pathlib import Path
-from typing import List
+from typing import List, Tuple
 
 from nbformat import NotebookNode
 from nbformat.v4 import new_notebook, new_markdown_cell, new_code_cell
 
 from src.constants import CELL_SEPARATOR, REMOVE_OUTPUT_TAG
+from src.output_types import OutputTypes, EXTENSION2TYPE, TYPE2EXTENSION
 
 
 def code_preprocessor(input_source: str) -> str:
@@ -22,12 +23,12 @@ class CellType(Enum):
     MARKDOWN = 2
 
 
-type2func = {
+TYPE2FUNC = {
     CellType.CODE: new_code_cell,
     CellType.MARKDOWN: new_markdown_cell,
 }
 
-type2preprocessor = {
+TYPE2PREPROCESSOR = {
     CellType.CODE: code_preprocessor,
     CellType.MARKDOWN: markdown_preprocessor,
 }
@@ -65,8 +66,8 @@ def py_to_ipynb(py_file_text: str) -> NotebookNode:
 
 def create_cell_from_lines(cell_lines: List[str], cell_type: CellType) -> NotebookNode:
     source = os.linesep.join(cell_lines)
-    processed_source = type2preprocessor[cell_type](source)
-    cell = type2func[cell_type](processed_source)
+    processed_source = TYPE2PREPROCESSOR[cell_type](source)
+    cell = TYPE2FUNC[cell_type](processed_source)
 
     if cell_type == CellType.CODE:
         cell = handle_cell_tags(cell, REMOVE_OUTPUT_TAG)
@@ -95,3 +96,27 @@ def construct_output_filename(outputname: Path, extension: str, input_name: Path
     assert not filename == str(input_name), f'Your source file and the expected output file name are the same: ' \
                                             f'{input_name}, specify different outfile name using --output flag.'
     return Path(filename)
+
+
+def set_output_extension_and_type(output: Path, type: OutputTypes) -> Tuple[Path, OutputTypes]:
+    """
+    If output without extension but specified type -> add extension to output
+    If output with extension -> overwrite current type
+    If output with extension but not allowed extension -> raise AssertionError
+    If output without extension and type is None -> raise AttributeError
+    """
+    if output.suffix != '':
+        allowed_extensions = list(EXTENSION2TYPE.keys())
+        assert output.suffix in allowed_extensions, \
+            f'Specified outputy file has type: {output.suffix}, while only {allowed_extensions} are allowed.'
+        type = EXTENSION2TYPE[output.suffix]
+    elif type is not None:
+        output = Path(str(output) + TYPE2EXTENSION[type])
+        print(output)
+    else:
+        raise AttributeError(
+            f'Please provide output file type by adding extension to outfile (.md or .ipynb) or specifying that by '
+            f'--type parameter [{OutputTypes.MARKDOWN_TYPE}, {OutputTypes.JUPYTER_TYPE}] are allowed.'
+        )
+
+    return output, type

@@ -25,7 +25,7 @@ def test_cli_positive(cli_runner_instance, tmp_path, type, expected_extension, o
     outfile_path = tmp_path / output_filename
     expected_output_path = Path(str(outfile_path) + expected_extension)
 
-    result = cli_runner_instance.invoke(cli, ['--source', example_input, "--output", outfile_path, "--type", type])
+    result = cli_runner_instance.invoke(cli, ['convert', '--source', example_input, "--output", outfile_path, "--type", type])
 
     if result.exception:
         print(result.exception)
@@ -41,7 +41,7 @@ def test_py_file_with_import(cli_runner_instance, tmp_path):
     outfile = tmp_path / 'output'
     outfile_path = tmp_path / 'output.md'
     result = cli_runner_instance.invoke(cli, [
-        '--source', file_path, "--output", outfile, "--type", "markdown", "--execute"
+        'convert', '--source', file_path, "--output", outfile, "--type", "markdown", "--execute"
     ])
 
     if result.exception:
@@ -67,7 +67,7 @@ def test_cli_positive_markdown_output_removal_by_tags(cli_runner_instance, tmp_p
 
     result = cli_runner_instance.invoke(
         cli,
-        ['--source', example_input, "--output", outfile, "--type", "markdown", "--execute"]
+        ['convert', '--source', example_input, "--output", outfile, "--type", "markdown", "--execute"]
     )
 
     assert result.exit_code == 0
@@ -79,6 +79,30 @@ def test_cli_positive_markdown_output_removal_by_tags(cli_runner_instance, tmp_p
         assert "Goodbye sunshine2!" not in actual_contents
         assert "Hello sunshine3!" not in actual_contents
         assert "Goodbye sunshine4!" not in actual_contents
+
+
+def test_cli_batch_convert(cli_runner_instance, tmp_path):
+    example_config = STATIC_FILES / "tutorial_config.yml"
+    output_dir = tmp_path / 'output_dir'
+    input_dir = STATIC_FILES.parent.parent
+
+    result = cli_runner_instance.invoke(
+        cli,
+        ['batch-convert',
+         '--config', example_config,
+         "--output-dir", output_dir,
+         "--input-dir", input_dir,
+         "--no-execute"]
+    )
+
+    if result.exception:
+        print(str(result.exception))
+        print(str(result.stdout))
+        print(str(result.stderr))
+
+    assert result.exit_code == 0
+
+    assert len(os.listdir(output_dir)) == 6
 
 
 def test_cli_missing_filename(cli_runner_instance):

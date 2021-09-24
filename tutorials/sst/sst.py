@@ -48,7 +48,7 @@ def convert2all(source: Path, output_dir: Path):
 
     configuration = [
         [output_filename.with_suffix('.md'), OutputTypes.MARKDOWN_TYPE, True],
-        [output_filename.with_stem(source.stem + '_pure').with_suffix('.py'), OutputTypes.PUREPYTHON_TYPE, False],
+        [output_filename.with_name(source.stem + '_pure').with_suffix('.py'), OutputTypes.PUREPYTHON_TYPE, False],
         [output_filename.with_suffix('.ipynb'), OutputTypes.JUPYTER_TYPE, False]
     ]
 

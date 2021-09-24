@@ -24,6 +24,9 @@ def cli_runner_instance():
 def test_cli_positive(cli_runner_instance, tmp_path, type, expected_extension, output_filename):
     outfile_path = tmp_path / output_filename
     expected_output_path = Path(str(outfile_path) + expected_extension)
+    result = cli_runner_instance.invoke(cli, [
+        'convert', '--source', example_input, "--output", outfile_path, "--type", type
+    ])
 
     result = cli_runner_instance.invoke(cli, ['convert', '--source', example_input, "--output", outfile_path, "--type", type])
 
@@ -83,7 +86,9 @@ def test_py_file_with_import(cli_runner_instance, tmp_path):
 
 def test_wrong_path_when_purepython():
     with pytest.raises(AttributeError) as e_info:
-        cli_runner_instance.invoke(cli, ['--source', example_input, "--output", example_input, "--type", 'purepython'])
+        cli_runner_instance.invoke(cli, [
+            'convert', '--source', example_input, "--output", example_input, "--type", 'purepython'
+        ])
 
 
 def test_cli_positive_markdown_output_removal_by_tags(cli_runner_instance, tmp_path):
@@ -91,10 +96,9 @@ def test_cli_positive_markdown_output_removal_by_tags(cli_runner_instance, tmp_p
     outfile = tmp_path / 'output'
     outfile_path = tmp_path / 'output.md'
 
-    result = cli_runner_instance.invoke(
-        cli,
-        ['convert', '--source', example_input, "--output", outfile, "--type", "markdown", "--execute"]
-    )
+    result = cli_runner_instance.invoke(cli, [
+        'convert', '--source', example_input, "--output", outfile, "--type", "markdown", "--execute"
+    ])
 
     print_exception(result)
 
@@ -131,10 +135,34 @@ def test_cli_batch_convert(cli_runner_instance, tmp_path):
 
 
 def test_cli_missing_filename(cli_runner_instance):
-    result = cli_runner_instance.invoke(cli, ["--output", 'filename'])
+    result = cli_runner_instance.invoke(cli, ['convert', "--output", 'filename'])
     assert result.exit_code == 2
 
 
 def test_cli_missing_output(cli_runner_instance):
-    result = cli_runner_instance.invoke(cli, ['--source', example_input])
+    result = cli_runner_instance.invoke(cli, ['convert', '--source', example_input])
     assert result.exit_code == 2
+
+
+def test_cli_convert_when_input_file_is_not_py(cli_runner_instance):
+    with pytest.raises(AssertionError) as e_info:
+        result = cli_runner_instance.invoke(cli, ['convert', '--source', 'input.txt', "--output", 'output.py'])
+        if result.exception:
+            raise result.exception
+
+
+def test_cli_convert2all_when_input_file_is_not_py(cli_runner_instance):
+    with pytest.raises(AssertionError) as e_info:
+        result = cli_runner_instance.invoke(cli, ['convert2all', '--source', 'input.txt'])
+        if result.exception:
+            raise result.exception
+
+
+def test_cli_convert2all_when_correct_input(cli_runner_instance, tmp_path):
+    result = cli_runner_instance.invoke(cli, ['convert2all', '--source', example_input, '--output-dir', tmp_path])
+    outfile_path = tmp_path / Path('trivial_mapping_md_code_md')
+
+    assert os.path.exists(outfile_path.with_suffix('.md'))
+    assert os.path.exists(outfile_path.with_suffix('.ipynb'))
+    assert os.path.exists(outfile_path.with_name('trivial_mapping_md_code_md_pure.py'))
+    assert result.exit_code == 0

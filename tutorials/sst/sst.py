@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import click
+from tqdm import tqdm
 
 from src.exporters import execute_multiple_exporters, execute_single_exporter
 from src.format_converter import set_output_extension_and_type
@@ -26,9 +27,33 @@ def convert(source: Path, output: Path, type: OutputTypes, execute: bool) -> Non
     Command used to generate all outputs with one flow.
     """
     output, type = set_output_extension_and_type(output, type)
+
+    assert source.suffix == '.py', 'Only python file can be single source file'
     assert output != source, f'Your source file and the expected output file name are the same: {source}, ' \
                              f'specify different outfile name using --output flag.'
-    execute_single_exporter(execute, output, source, type)
+    execute_single_exporter(execute=execute, output=output, source=source, output_type=type)
+
+
+@cli.command()
+@click.option('--source', '-s', required=True, type=Path,
+              help='Absolute or relative path to python file to be converted')
+@click.option('--output-dir', '-o', required=False, type=Path, help='Absolute or relative path to output directory.')
+def convert2all(source: Path, output_dir: Path):
+    assert source.suffix == '.py', 'Only python file can be single source file'
+    if output_dir is None:
+        output_dir = source.parent
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    output_filename = output_dir / source.stem
+
+    configuration = [
+        [output_filename.with_suffix('.md'), OutputTypes.MARKDOWN_TYPE, True],
+        [output_filename.with_stem(source.stem + '_pure').with_suffix('.py'), OutputTypes.PUREPYTHON_TYPE, False],
+        [output_filename.with_suffix('.ipynb'), OutputTypes.JUPYTER_TYPE, False]
+    ]
+
+    for outfile, output_type, execution in tqdm(configuration):
+        execute_single_exporter(source=source, output=outfile, output_type=output_type, execute=execution)
 
 
 @cli.command()

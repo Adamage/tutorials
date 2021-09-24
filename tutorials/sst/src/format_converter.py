@@ -7,7 +7,7 @@ from nbformat import NotebookNode
 from nbformat.v4 import new_notebook, new_markdown_cell, new_code_cell
 
 from src.constants import CELL_SEPARATOR, REMOVE_OUTPUT_TAG
-from src.output_types import OutputTypes, EXTENSION2TYPE, TYPE2EXTENSION
+from src.output_types import OutputTypes, EXTENSION2TYPE, TYPE2EXTENSION, supported_types_pretty
 
 
 def code_preprocessor(input_source: str) -> str:
@@ -101,14 +101,14 @@ def set_output_extension_and_type(output: Path, type: OutputTypes) -> Tuple[Path
     if output.suffix != '':
         allowed_extensions = list(EXTENSION2TYPE.keys())
         assert output.suffix in allowed_extensions, \
-            f'Specified outputy file has type: {output.suffix}, while only {allowed_extensions} are allowed.'
+            f'Specified output file has type: {output.suffix}, while only {allowed_extensions} are allowed.'
         type = EXTENSION2TYPE[output.suffix]
     elif type is not None:
         output = Path(str(output) + TYPE2EXTENSION[type])
     else:
         raise AttributeError(
             f'Please provide output file type by adding extension to outfile (.md or .ipynb) or specifying that by '
-            f'--type parameter [{OutputTypes.MARKDOWN_TYPE}, {OutputTypes.JUPYTER_TYPE}] are allowed.'
+            f'--type parameter {supported_types_pretty()} are allowed.'
         )
 
     return output, type

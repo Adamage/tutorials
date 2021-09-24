@@ -45,7 +45,7 @@ def exporter_factory(type: OutputTypes, execute_enabled: bool) -> Exporter:
     return exporter
 
 
-def execute_single_exporter(execute: bool, output: Path, source: Path, output_type: OutputTypes):
+def execute_single_exporter(source: Path, output: Path, output_type: OutputTypes, execute: bool):
     py_text = source.read_text()
     notebook = py_to_ipynb(py_text)
 
@@ -56,7 +56,7 @@ def execute_single_exporter(execute: bool, output: Path, source: Path, output_ty
     output.write_text(output_content)
 
 
-def execute_multiple_exporters(config_path: Path, input_directory: Path, output_directory: Path, execute: bool):
+def execute_multiple_exporters(input_directory: Path, output_directory: Path, config_path: Path, execute: bool):
     tutorial_configs = batch_config(config_path)
     output_directory.mkdir(parents=True, exist_ok=True)
 

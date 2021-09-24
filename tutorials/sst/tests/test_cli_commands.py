@@ -134,6 +134,28 @@ def test_cli_batch_convert(cli_runner_instance, tmp_path):
     assert len(os.listdir(output_dir)) == 6
 
 
+@pytest.mark.parametrize("config_path", ['tutorial_config_incorrect.yml', 'tutorial_config_empty.yml'])
+def test_cli_batch_convert_incorrect_config(cli_runner_instance, tmp_path, config_path):
+    example_config = STATIC_FILES / config_path
+    output_dir = tmp_path / 'output_dir'
+    input_dir = STATIC_FILES.parent.parent
+
+    with pytest.raises(Exception) as e_info:
+        result = cli_runner_instance.invoke(
+            cli,
+            ['batch-convert',
+             '--config', example_config,
+             "--output-dir", output_dir,
+             "--input-dir", input_dir,
+             "--no-execute"]
+        )
+
+        print_exception(result)
+
+        if result.exception:
+            raise result.exception
+
+
 def test_cli_missing_filename(cli_runner_instance):
     result = cli_runner_instance.invoke(cli, ['convert', "--output", 'filename'])
     assert result.exit_code == 2

@@ -11,7 +11,7 @@ TutorialConfig = namedtuple("TutorialConfig", "name source")
 def batch_config(config_path: Path) -> List[TutorialConfig]:
     parsed_configs = _parse_config(config_path).get("tutorials", [])
     if not parsed_configs:
-        raise Exception("Provied configuration file has no specified tutorials to convert!")
+        raise Exception("Provided configuration file has no specified tutorials to convert!")
 
     tutorial_configs = [
         TutorialConfig(

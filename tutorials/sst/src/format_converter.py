@@ -105,7 +105,6 @@ def set_output_extension_and_type(output: Path, type: OutputTypes) -> Tuple[Path
         type = EXTENSION2TYPE[output.suffix]
     elif type is not None:
         output = Path(str(output) + TYPE2EXTENSION[type])
-        print(output)
     else:
         raise AttributeError(
             f'Please provide output file type by adding extension to outfile (.md or .ipynb) or specifying that by '

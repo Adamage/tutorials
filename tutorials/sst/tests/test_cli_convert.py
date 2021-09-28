@@ -112,6 +112,26 @@ def test_cli_positive_markdown_output_removal_by_tags(cli_runner_instance, tmp_p
         assert "Goodbye sunshine4!" not in actual_contents
 
 
+def test_cli_positive_markdown_output_extraction(cli_runner_instance, tmp_path):
+    example_input = STATIC_FILES / "output_extraction.py"
+    output_filename = "output.md"
+    outfile = tmp_path / 'output'
+    outfile_path = tmp_path / output_filename
+
+    result = cli_runner_instance.invoke(cli, [
+        'convert', '--source', example_input, "--output", outfile, "--type", "markdown", "--execute"
+    ])
+
+    print_exception(result)
+
+    assert result.exit_code == 0
+
+    files = os.listdir(outfile_path.parent)
+    assert len(files) == 2
+    assert "output_1_0.png" in files
+    assert output_filename in files
+
+
 def test_cli_missing_filename(cli_runner_instance):
     result = cli_runner_instance.invoke(cli, ['convert', "--output", 'filename'])
     assert result.exit_code == 2

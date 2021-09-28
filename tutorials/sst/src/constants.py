@@ -1,2 +1,7 @@
 CELL_SEPARATOR = '"""'
 REMOVE_OUTPUT_TAG = 'remove_output'
+
+NBCONVERT_RESOURCE_OUTPUT_EXT_KEY = 'output_extension'
+NBCONVERT_RESOURCE_OUTPUT_DIR_KEY = 'output_files_dir'
+NBCONVERT_RESOURCE_OUTPUTS_KEY = 'outputs'
+IMAGES_DIR = 'outputs'

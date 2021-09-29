@@ -1,3 +1,4 @@
+# Copyright (c) 2019 Graphcore Ltd. All rights reserved.
 """
 This tool will automatically attach Keras-docs style syntax to a regular script, as long as it's formatted with some
 rules:

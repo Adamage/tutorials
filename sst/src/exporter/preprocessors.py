@@ -1,3 +1,4 @@
+# Copyright (c) 2019 Graphcore Ltd. All rights reserved.
 from traitlets.config import Config
 
 from src.constants import REMOVE_OUTPUT_TAG

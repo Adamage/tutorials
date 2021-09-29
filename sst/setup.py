@@ -1,3 +1,4 @@
+# Copyright (c) 2019 Graphcore Ltd. All rights reserved.
 from setuptools import setup  # pragma: no cover
 
 REQUIREMENTS = [i.strip() for i in open("requirements.txt").readlines()]  # pragma: no cover

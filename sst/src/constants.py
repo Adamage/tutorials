@@ -1,3 +1,4 @@
+# Copyright (c) 2019 Graphcore Ltd. All rights reserved.
 CELL_SEPARATOR = '"""'
 REMOVE_OUTPUT_TAG = 'remove_output'
 

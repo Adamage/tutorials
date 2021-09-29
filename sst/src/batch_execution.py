@@ -1,3 +1,4 @@
+# Copyright (c) 2019 Graphcore Ltd. All rights reserved.
 from collections import namedtuple
 from pathlib import Path
 from typing import List, Dict
@@ -28,4 +29,4 @@ def batch_config(config_path: Path) -> List[TutorialConfig]:
 
 def _parse_config(config_path: Path) -> List[Dict[str, str]]:
     with open(config_path) as f:
-        return yaml.load(f)
+        return yaml.load(f,  yaml.SafeLoader)

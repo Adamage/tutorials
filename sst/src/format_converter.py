@@ -6,7 +6,7 @@ from typing import List
 from nbformat import NotebookNode
 from nbformat.v4 import new_notebook, new_markdown_cell, new_code_cell
 
-from src.constants import CELL_SEPARATOR, REMOVE_OUTPUT_TAG
+from src.constants import CELL_SEPARATOR, SST_HIDE_OUTPUT_TAG
 
 
 def code_preprocessor(input_source: str) -> str:
@@ -99,7 +99,7 @@ def create_cell_from_lines(cell_lines: List[str], cell_type: CellType) -> Notebo
     cell = TYPE2FUNC[cell_type](processed_source)
 
     if cell_type == CellType.CODE:
-        cell = handle_cell_tag(cell, REMOVE_OUTPUT_TAG)
+        cell = handle_cell_tag(cell, SST_HIDE_OUTPUT_TAG)
 
     return cell
 

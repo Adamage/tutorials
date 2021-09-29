@@ -1,3 +1,4 @@
+# Copyright (c) 2019 Graphcore Ltd. All rights reserved.
 import os
 from os.path import abspath, splitext
 from pathlib import Path

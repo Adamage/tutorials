@@ -15,7 +15,7 @@ def cli_runner_instance():
 
 
 def test_cli_batch_convert(cli_runner_instance, tmp_path):
-    example_config = STATIC_FILES / "tutorial_config.yml"
+    example_config = STATIC_FILES / "conversion_config.yml"
     output_dir = tmp_path / 'output_dir'
     source_dir = STATIC_FILES.parent.parent
 
@@ -31,7 +31,7 @@ def test_cli_batch_convert(cli_runner_instance, tmp_path):
     assert len(os.listdir(output_dir)) == 6
 
 
-@pytest.mark.parametrize("config_path", ['tutorial_config_incorrect.yml', 'tutorial_config_empty.yml'])
+@pytest.mark.parametrize("config_path", ['conversion_config_incorrect.yml', 'conversion_config_empty.yml'])
 def test_cli_batch_convert_incorrect_config(cli_runner_instance, tmp_path, config_path):
     example_config = STATIC_FILES / config_path
     output_dir = tmp_path / 'output_dir'

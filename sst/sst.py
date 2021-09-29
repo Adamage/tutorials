@@ -64,12 +64,12 @@ def convert2all(source: Path, output_dir: Path) -> None:
 
 @cli.command()
 @click.option('--config', '-c', required=True, type=Path,
-              help='Absolute or relative path to YAML file with list of all tutorials to execute')
+              help='Absolute or relative path to YAML file with list of all files to execute')
 @click.option('--source-dir', '-s', required=True, type=Path,
-              help='Absolute or relative path to directory with all tutorials, relative to which, the config YML has '
+              help='Absolute or relative path to directory with all files, relative to which, the config YML has '
                    'been created')
 @click.option('--output-dir', '-o', required=True, type=Path,
-              help='Absolute or relative path to output directory for all tutorials')
+              help='Absolute or relative path to output directory for all files')
 @click.option('--execute/--no-execute', default=True, help='Flag whether the notebook is to be executed or not')
 def batch_convert(config: Path, source_dir: Path, output_dir: Path, execute: bool) -> None:
     """

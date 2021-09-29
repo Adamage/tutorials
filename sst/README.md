@@ -44,7 +44,7 @@ Our software is designed to solve all your problems
 """
 """
 # Installation
-Rest of tutorial
+Rest of installation
 """
 """
 Example usage:
@@ -113,17 +113,17 @@ Moreover, you can convert a whole batch of python scripts, using a yaml configur
 
 ```bash
 sst batch_convert \
- --config tutorial_list.yml \
- --source-dir tutorials/tutorials \
- --output-dir tutorials/tutorials/my_batch \
+ --config configuration_file.yml \
+ --source-dir directory_where_script_will_be_executed \
+ --output-dir directory_where_outputs_will_be_stored \
  --execute
  ```
 
 Config file would look like this:
 ```yaml
-tutorials:
-    - name: Tutorial1
-      source: pytorch/tutorial1/script.py
+files:
+    - name: file1
+      source: pytorch/package/script.py
 ```
 
 You can find more details by adding a `--help` switch to each command.

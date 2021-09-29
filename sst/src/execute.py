@@ -1,6 +1,7 @@
 # Copyright (c) 2019 Graphcore Ltd. All rights reserved.
 from pathlib import Path
 
+from tqdm import tqdm
 from nbconvert.exporters.exporter import ResourcesDict
 from nbconvert.writers import FilesWriter
 
@@ -35,15 +36,15 @@ def save_conversion_results(output: Path, output_content: str, resources: Resour
         del resources[NBCONVERT_RESOURCE_OUTPUT_EXT_KEY]
 
     writer = FilesWriter(build_directory=str(output.parent))
-    writer.write(output=output_content, resources=resources, notebook_name=str(output))
+    writer.write(output=output_content, resources=resources, notebook_name=str(output.name))
 
 
 def execute_multiple_conversions(source_directory: Path, output_directory: Path, config_path: Path, execute: bool):
     conversion_configs = batch_config(config_path)
     output_directory.mkdir(parents=True, exist_ok=True)
 
-    for tc in conversion_configs:
-        for supported_type in supported_types():
+    for tc in tqdm(conversion_configs, desc="SST All Configs", leave=True):
+        for supported_type in tqdm(supported_types(), desc="SST Config", leave=False):
             output, output_type = set_output_extension_and_type(output_directory / tc.name, supported_type)
             execute_conversion(
                 execute=execute,

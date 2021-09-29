@@ -3,6 +3,7 @@ from nbconvert import Exporter, MarkdownExporter, NotebookExporter
 from nbconvert.preprocessors import ExecutePreprocessor, TagRemovePreprocessor, ExtractOutputPreprocessor
 from traitlets.config import Config
 
+from src.exporter.execute_preprocessor_with_progress_bar import ExecutePreprocessorWithProgressBar
 from src.exporter.preprocessors import configure_tag_removal_preprocessor, configure_extract_outputs_preprocessor
 from src.exporter.pure_python import PurePythonExporter
 from src.output_types import OutputTypes
@@ -14,7 +15,7 @@ def markdown_exporter_with_preprocessors(execute_enabled: bool) -> Exporter:
     config = configure_extract_outputs_preprocessor(config)
 
     exporter = MarkdownExporter()
-    exporter.register_preprocessor(ExecutePreprocessor(), enabled=execute_enabled)
+    exporter.register_preprocessor(ExecutePreprocessorWithProgressBar(), enabled=execute_enabled)
     exporter.register_preprocessor(TagRemovePreprocessor(config=config), enabled=True)
     exporter.register_preprocessor(ExtractOutputPreprocessor(config=config), enabled=True)
 
@@ -23,7 +24,7 @@ def markdown_exporter_with_preprocessors(execute_enabled: bool) -> Exporter:
 
 def notebook_exporter_with_preprocessors(execute_enabled: bool) -> Exporter:
     exporter = NotebookExporter()
-    exporter.register_preprocessor(ExecutePreprocessor(), enabled=execute_enabled)
+    exporter.register_preprocessor(ExecutePreprocessorWithProgressBar(), enabled=execute_enabled)
 
     return exporter
 

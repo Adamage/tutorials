@@ -7,18 +7,20 @@ documentation convention) when the script is able to run it and transform it to 
 jupyter notebook), or hide the documentation completely and create a ready to run script (later called pure python).
 
 ## Installation
+
+In order to install the package together with its dependencies, run:
 ```bash
-cd sst
 pip3 install -e .
-pytest .
 ```
 
-Run script by typing:
+This will allow you to run the script from any directory by typing:
 ```bash
 sst --help
 ```
-or:
+
+However, you can still install the dependencies separately or use the package by calling the script:
 ```bash
+pip install -r requirements.txt
 python3 sst.py --help
 ```
 
@@ -64,12 +66,12 @@ greet('John')
 #### Hiding outputs
 Sometimes it may happen that your post-execution file contains very long output, which when transformed to markdown 
 will take up a lot of space. You can hide such output from such a cell by adding a special comment to your code: 
-`# remove_output` - note that line with this tag will be hidden. For example:
+`# sst_hide_output` - note that line with this tag will be hidden. For example:
 
 ```python
 for _ in range(1000):
     print(greet('John'))
-# remove_output
+# sst_hide_output
 ```
 
 ## Transformation to other formats
@@ -80,7 +82,7 @@ By default, beyond python file that is single source of truth we would like to s
 
 You can automatically generate all 3 formats by using the command:
 ```bash
-sst convert2all --source path_to_you_python_file --output-dir path_to_your_directory
+sst convert2all --source path_to_your_python_file --output-dir path_to_your_directory
 ```
 
 If you would like to create each of these format files separately use:
@@ -91,6 +93,9 @@ sst convert \
  --type [jupyter|markdown|purepython] \
  --execute/--no-execute
 ```
+
+Switch `--execute/--no-execute` indicates whether the file should be run. This implies the resulting file will contain 
+the outputs from the run or only the contents of the source file itself.
 
 Example usages:
 ```bash
@@ -112,7 +117,7 @@ sst convert \
 Moreover, you can convert a whole batch of python scripts, using a yaml configuration file:
 
 ```bash
-sst batch_convert \
+sst batch-convert \
  --config configuration_file.yml \
  --source-dir directory_where_script_will_be_executed \
  --output-dir directory_where_outputs_will_be_stored \

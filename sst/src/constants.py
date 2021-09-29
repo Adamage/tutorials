@@ -1,6 +1,6 @@
 # Copyright (c) 2019 Graphcore Ltd. All rights reserved.
 CELL_SEPARATOR = '"""'
-REMOVE_OUTPUT_TAG = 'remove_output'
+SST_HIDE_OUTPUT_TAG = 'sst_hide_output'
 
 NBCONVERT_RESOURCE_OUTPUT_EXT_KEY = 'output_extension'
 NBCONVERT_RESOURCE_OUTPUT_DIR_KEY = 'output_files_dir'

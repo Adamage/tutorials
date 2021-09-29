@@ -18,7 +18,7 @@ jobs:
 
     - name: Run coverage
       run: |
-        cd tutorials/sst
+        cd sst
         pytest --cov=./
 
     - name: Upload Coverage to Codecov

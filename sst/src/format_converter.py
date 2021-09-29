@@ -68,9 +68,21 @@ def py_to_ipynb(py_file_text: str) -> NotebookNode:
         new_cell = create_cell_from_lines(cell_lines, current_cell_type)
         cells.append(new_cell)
 
+    cells = remove_shebang(cells)
+
     notebook = new_notebook(cells=cells)
 
     return notebook
+
+
+def remove_shebang(cells: List[NotebookNode]) -> List[NotebookNode]:
+    """
+    Args:
+        cells - list of notebook cells
+    """
+    if cells and cells[0].source.startswith("#!"):
+        cells = cells[1:]
+    return cells
 
 
 def create_cell_from_lines(cell_lines: List[str], cell_type: CellType) -> NotebookNode:

@@ -43,6 +43,12 @@ def test_cli_convert2all_when_correct_input(cli_runner_instance, tmp_path):
     outfile_path = tmp_path / Path('trivial_mapping_md_code_md')
 
     assert os.path.exists(outfile_path.with_suffix('.md'))
+    assert "#!" not in outfile_path.with_suffix('.md').read_text()
+
     assert os.path.exists(outfile_path.with_suffix('.ipynb'))
+    assert "#!" not in outfile_path.with_suffix('.ipynb').read_text()
+
     assert os.path.exists(outfile_path.with_name('trivial_mapping_md_code_md_pure.py'))
+    assert "#!" in outfile_path.with_name('trivial_mapping_md_code_md_pure.py').read_text()
+
     assert result.exit_code == 0

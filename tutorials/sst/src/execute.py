@@ -38,10 +38,10 @@ def save_conversion_results(output: Path, output_content: str, resources: Resour
 
 
 def execute_multiple_conversions(source_directory: Path, output_directory: Path, config_path: Path, execute: bool):
-    tutorial_configs = batch_config(config_path)
+    conversion_configs = batch_config(config_path)
     output_directory.mkdir(parents=True, exist_ok=True)
 
-    for tc in tutorial_configs:
+    for tc in conversion_configs:
         for supported_type in supported_types():
             output, output_type = set_output_extension_and_type(output_directory / tc.name, supported_type)
             execute_conversion(

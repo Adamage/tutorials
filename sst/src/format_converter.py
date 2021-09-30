@@ -1,4 +1,4 @@
-# Copyright (c) 2019 Graphcore Ltd. All rights reserved.
+# Copyright (c) 2021 Graphcore Ltd. All rights reserved.
 import os
 from enum import Enum
 from typing import List
@@ -9,14 +9,6 @@ from nbformat.v4 import new_notebook, new_markdown_cell, new_code_cell
 from src.constants import CELL_SEPARATOR, SST_HIDE_OUTPUT_TAG
 
 
-def code_preprocessor(input_source: str) -> str:
-    return input_source.strip(os.linesep)
-
-
-def markdown_preprocessor(input_source: str) -> str:
-    return input_source
-
-
 class CellType(Enum):
     CODE = 1
     MARKDOWN = 2
@@ -25,11 +17,6 @@ class CellType(Enum):
 TYPE2FUNC = {
     CellType.CODE: new_code_cell,
     CellType.MARKDOWN: new_markdown_cell,
-}
-
-TYPE2PREPROCESSOR = {
-    CellType.CODE: code_preprocessor,
-    CellType.MARKDOWN: markdown_preprocessor,
 }
 
 
@@ -95,7 +82,7 @@ def create_cell_from_lines(cell_lines: List[str], cell_type: CellType) -> Notebo
         NotebookNode which contains specified type and merged content
     """
     source = os.linesep.join(cell_lines)
-    processed_source = TYPE2PREPROCESSOR[cell_type](source)
+    processed_source = source.strip(os.linesep) if cell_type is CellType.CODE else source
     cell = TYPE2FUNC[cell_type](processed_source)
 
     if cell_type == CellType.CODE:
@@ -121,6 +108,13 @@ def handle_cell_tag(cell: NotebookNode, tag: str) -> NotebookNode:
 
 
 def remove_from_cell_source(cell: NotebookNode, string_to_remove: str) -> NotebookNode:
+    """
+    This function will iterate through the source code attached to a Notebook cell. If one of the lines contains
+    the string_to_remove, it is omitted completely.
+    Args:
+        cell: Cell to by analyzed
+        string_to_remove: a string that indicates a single code line should be omitted completely from the cell source
+    """
     cell.source = os.linesep.join(
         [
             line for line in cell.source.splitlines()

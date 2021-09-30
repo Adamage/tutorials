@@ -1,4 +1,4 @@
-# Copyright (c) 2019 Graphcore Ltd. All rights reserved.
+# Copyright (c) 2021 Graphcore Ltd. All rights reserved.
 import pytest
 from click.testing import CliRunner
 from sst import cli

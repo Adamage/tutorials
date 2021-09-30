@@ -1,4 +1,4 @@
-# Copyright (c) 2019 Graphcore Ltd. All rights reserved.
+# Copyright (c) 2021 Graphcore Ltd. All rights reserved.
 CELL_SEPARATOR = '"""'
 SST_HIDE_OUTPUT_TAG = 'sst_hide_output'
 

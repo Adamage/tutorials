@@ -348,7 +348,6 @@ in each step is now `(batch_size * num_replicas)`. We therefore add two lines to
 
 ```python
 def make_divisible(number):
-    print(" I AM ALIVE AGIAN")
     return number - number % (batch_size * num_replicas)
 ```
 

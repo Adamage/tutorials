@@ -1,4 +1,4 @@
-# Copyright (c) 2019 Graphcore Ltd. All rights reserved.
+# Copyright (c) 2021 Graphcore Ltd. All rights reserved.
 from pathlib import Path
 
 import click
@@ -22,7 +22,7 @@ def cli():
                    'Output filepath can be provided without extenstion, then type is taken from --type.')
 @click.option('--type', '-t', type=click.Choice(supported_types()), default=None,
               help='Desired output file type. Parameter is ignored when --output contains specified file extension')
-@click.option('--execute/--no-execute', default=True, help='Flag whether the file is to be executed or not')
+@click.option('--execute/--no-execute', default=False, help='Flag whether the file is to be executed or not')
 def convert(source: Path, output: Path, type: OutputTypes, execute: bool) -> None:
     """
     Transforms source python file into specified format (jupyter notebook, markdown, pure python file without

@@ -1,12 +1,14 @@
-# Copyright (c) 2019 Graphcore Ltd. All rights reserved.
+# Copyright (c) 2021 Graphcore Ltd. All rights reserved.
 import os
 
 import pytest
 from click.testing import CliRunner
 
 from src.utils.click import print_exception
-from src.utils.path import STATIC_FILES
+from tests.test_utils.path import get_unit_test_static_files_dir
 from sst import cli
+
+STATIC_FILES = get_unit_test_static_files_dir()
 
 
 @pytest.fixture

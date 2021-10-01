@@ -86,7 +86,12 @@ sst convert2all --source path_to_your_python_file --output-dir path_to_your_dire
 ```
 The resulting files will have the same names as the input file with a different extension. 
 The exception is the transformation to python code, in which case to avoid overwriting the source file the suffix `_code`
-will be added.
+will be added to it. Example result will be placed under:
+```bash
+path_to_your_directory/source_file_name.md
+path_to_your_directory/source_file_name.ipynb
+path_to_your_directory/source_file_name_code.py
+```
 
 If you would like to create each of these format files separately use:
 ```bash

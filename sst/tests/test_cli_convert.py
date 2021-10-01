@@ -15,7 +15,7 @@ def cli_runner_instance():
 
 
 @pytest.mark.parametrize("type, expected_extension",
-                         [('purepython', '.py'), ('markdown', '.md'), ('jupyter', '.ipynb')])
+                         [('code', '.py'), ('markdown', '.md'), ('jupyter', '.ipynb')])
 @pytest.mark.parametrize("output_filename", ['filename', 'nested/path/filename'])
 def test_cli_positive(cli_runner_instance, tmp_path, type, expected_extension, output_filename):
     outfile_path = tmp_path / output_filename
@@ -78,10 +78,10 @@ def test_py_file_with_import(cli_runner_instance, tmp_path):
     assert generated_markdown == expected_markdown
 
 
-def test_wrong_path_when_purepython(cli_runner_instance):
+def test_wrong_path_when_code_export(cli_runner_instance):
     with pytest.raises(AssertionError) as e_info:
         result = cli_runner_instance.invoke(cli, [
-            'convert', '--source', EXAMPLE_INPUT_PATH, "--output", EXAMPLE_INPUT_PATH, "--type", 'purepython'
+            'convert', '--source', EXAMPLE_INPUT_PATH, "--output", EXAMPLE_INPUT_PATH, "--type", 'code'
         ])
         if result.exception:
             raise result.exception

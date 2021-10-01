@@ -1,9 +1,9 @@
 # Copyright (c) 2019 Graphcore Ltd. All rights reserved.
 import pytest
 from click.testing import CliRunner
-from sst import cli
 
 from src.utils.click import print_exception
+from sst import cli
 
 
 @pytest.fixture

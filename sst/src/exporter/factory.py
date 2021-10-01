@@ -5,7 +5,7 @@ from traitlets.config import Config
 
 from src.exporter.execute_preprocessor_with_progress_bar import ExecutePreprocessorWithProgressBar
 from src.exporter.preprocessors import configure_tag_removal_preprocessor, configure_extract_outputs_preprocessor
-from src.exporter.pure_python import PurePythonExporter
+from src.exporter.code_exporter import CodeExporter
 from src.output_types import OutputTypes
 
 
@@ -29,14 +29,14 @@ def notebook_exporter_with_preprocessors(execute_enabled: bool) -> Exporter:
     return exporter
 
 
-def pure_python_exporter(execute_enabled: bool) -> Exporter:
-    return PurePythonExporter()
+def code_exporter(execute_enabled: bool) -> Exporter:
+    return CodeExporter()
 
 
 TYPE2EXPORTER = {
     OutputTypes.JUPYTER_TYPE: notebook_exporter_with_preprocessors,
     OutputTypes.MARKDOWN_TYPE: markdown_exporter_with_preprocessors,
-    OutputTypes.PUREPYTHON_TYPE: pure_python_exporter
+    OutputTypes.CODE_TYPE: code_exporter
 }
 
 

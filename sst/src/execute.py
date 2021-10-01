@@ -12,6 +12,8 @@ from src.format_converter import py_to_ipynb
 from src.output_types import supported_types, OutputTypes
 from src.utils.file import set_output_extension_and_type
 
+from src.constants import CODE_SUFFIX
+
 
 def execute_conversion(source: Path, output: Path, output_type: OutputTypes, execute: bool):
     py_text = source.read_text()
@@ -46,6 +48,10 @@ def execute_multiple_conversions(source_directory: Path, output_directory: Path,
     for tc in tqdm(conversion_configs, desc="SST All Configs", leave=True):
         for supported_type in tqdm(supported_types(), desc="SST Config", leave=False):
             output, output_type = set_output_extension_and_type(output_directory / tc.name, supported_type)
+
+            if output_type == OutputTypes.CODE_TYPE:
+                output = output.with_name(output.stem + CODE_SUFFIX)
+
             execute_conversion(
                 execute=execute,
                 output=output,

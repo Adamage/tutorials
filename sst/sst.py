@@ -7,6 +7,7 @@ from tqdm import tqdm
 from src.execute import execute_conversion, execute_multiple_conversions
 from src.output_types import OutputTypes, supported_types
 from src.utils.file import set_output_extension_and_type
+from src.constants import CODE_SUFFIX
 
 
 @click.group()
@@ -25,7 +26,7 @@ def cli():
 @click.option('--execute/--no-execute', default=True, help='Flag whether the file is to be executed or not')
 def convert(source: Path, output: Path, type: OutputTypes, execute: bool) -> None:
     """
-    Transforms source python file into specified format (jupyter notebook, markdown, pure python file without
+    Transforms source python file into specified format (jupyter notebook, markdown, python code file without
     documentation)
     """
     output, type = set_output_extension_and_type(output, type)
@@ -43,7 +44,7 @@ def convert(source: Path, output: Path, type: OutputTypes, execute: bool) -> Non
 def convert2all(source: Path, output_dir: Path) -> None:
     """
     Transforms source python file automatically into three specified formats with specified configuration:
-    jupyter notebook, executed markdown file and pure python script.
+    jupyter notebook, executed markdown file and python code script.
     """
     assert source.suffix == '.py', 'Only python file can be single source file'
     if output_dir is None:
@@ -54,7 +55,7 @@ def convert2all(source: Path, output_dir: Path) -> None:
 
     configuration = [
         [output_filename.with_suffix('.md'), OutputTypes.MARKDOWN_TYPE, True],
-        [output_filename.with_name(source.stem + '_code').with_suffix('.py'), OutputTypes.PUREPYTHON_TYPE, False],
+        [output_filename.with_name(source.stem + CODE_SUFFIX).with_suffix('.py'), OutputTypes.CODE_TYPE, False],
         [output_filename.with_suffix('.ipynb'), OutputTypes.JUPYTER_TYPE, False]
     ]
 
@@ -73,7 +74,7 @@ def convert2all(source: Path, output_dir: Path) -> None:
 @click.option('--execute/--no-execute', default=True, help='Flag whether the notebook is to be executed or not')
 def batch_convert(config: Path, source_dir: Path, output_dir: Path, execute: bool) -> None:
     """
-    Transforms python files specified in config into all possible formats: jupyter notebook, markdown and pure python
+    Transforms python files specified in config into all possible formats: jupyter notebook, markdown and python code
     """
     execute_multiple_conversions(
         source_directory=source_dir,

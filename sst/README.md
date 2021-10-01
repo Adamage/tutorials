@@ -4,7 +4,7 @@ Documentation maintenance tool for converting python files to jupyter notebooks 
 
 The purpose of this software is to keep the documentation in one format (a python file with a established 
 documentation convention) when the script is able to run it and transform it to other formats (markdown document or 
-jupyter notebook), or hide the documentation completely and create a ready to run script..
+jupyter notebook), or hide the documentation completely and create a ready to run script.
 
 ## Installation
 

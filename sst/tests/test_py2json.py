@@ -1,4 +1,4 @@
-# Copyright (c) 2019 Graphcore Ltd. All rights reserved.
+# Copyright (c) 2021 Graphcore Ltd. All rights reserved.
 import json
 from pathlib import Path
 
@@ -7,7 +7,10 @@ from deepdiff import DeepDiff
 from nbformat import NotebookNode
 
 from src.format_converter import py_to_ipynb
-from src.utils.path import STATIC_FILES
+from tests.test_utils.path import get_unit_test_static_files_dir
+
+
+STATIC_FILES = get_unit_test_static_files_dir()
 
 
 @pytest.mark.parametrize(

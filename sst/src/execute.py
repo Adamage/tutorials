@@ -1,4 +1,4 @@
-# Copyright (c) 2019 Graphcore Ltd. All rights reserved.
+# Copyright (c) 2021 Graphcore Ltd. All rights reserved.
 from pathlib import Path
 
 from tqdm import tqdm
@@ -53,7 +53,7 @@ def execute_multiple_conversions(source_directory: Path, output_directory: Path,
                 output = output.with_name(output.stem + CODE_SUFFIX)
 
             execute_conversion(
-                execute=execute,
+                execute=execute if supported_type is OutputTypes.MARKDOWN_TYPE else False,
                 output=output,
                 source=source_directory / tc.source,
                 output_type=output_type

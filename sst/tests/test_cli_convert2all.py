@@ -1,4 +1,4 @@
-# Copyright (c) 2019 Graphcore Ltd. All rights reserved.
+# Copyright (c) 2021 Graphcore Ltd. All rights reserved.
 import os
 from pathlib import Path
 
@@ -6,8 +6,11 @@ import pytest
 from click.testing import CliRunner
 
 from src.utils.click import print_exception
-from src.utils.path import EXAMPLE_INPUT_PATH
 from sst import cli
+from tests.test_utils.path import get_unit_test_static_files_dir
+
+
+TRIVIAL_MAPPING_SOURCE_PATH = get_unit_test_static_files_dir() / "trivial_mapping_md_code_md.py"
 
 
 @pytest.fixture
@@ -37,7 +40,7 @@ def test_cli_convert2all_when_no_output_dir(cli_runner_instance, tmp_path):
 
 
 def test_cli_convert2all_when_correct_input(cli_runner_instance, tmp_path):
-    result = cli_runner_instance.invoke(cli, ['convert2all', '--source', EXAMPLE_INPUT_PATH, '--output-dir', tmp_path])
+    result = cli_runner_instance.invoke(cli, ['convert2all', '--source', TRIVIAL_MAPPING_SOURCE_PATH, '--output-dir', tmp_path])
     print_exception(result)
 
     outfile_path = tmp_path / Path('trivial_mapping_md_code_md')

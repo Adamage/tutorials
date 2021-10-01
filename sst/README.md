@@ -4,7 +4,7 @@ Documentation maintenance tool for converting python files to jupyter notebooks 
 
 The purpose of this software is to keep the documentation in one format (a python file with a established 
 documentation convention) when the script is able to run it and transform it to other formats (markdown document or 
-jupyter notebook), or hide the documentation completely and create a ready to run script (later called pure python).
+jupyter notebook), or hide the documentation completely and create a ready to run script..
 
 ## Installation
 
@@ -78,19 +78,22 @@ for _ in range(1000):
 By default, beyond python file that is single source of truth we would like to store in the repository:
 - jupyter notebook which was not executed 
 - markdown file with the outputs after the execution
-- pure python file without documentation
+- python code file without documentation
 
 You can automatically generate all 3 formats by using the command:
 ```bash
 sst convert2all --source path_to_your_python_file --output-dir path_to_your_directory
 ```
+The resulting files will have the same names as the input file with a different extension. 
+The exception is the transformation to python code, in which case to avoid overwriting the source file the suffix `_code`
+will be added.
 
 If you would like to create each of these format files separately use:
 ```bash
 sst convert \
  --source path_to_you_python_file \
  --output outputfile \
- --type [jupyter|markdown|purepython] \
+ --type [jupyter|markdown|code] \
  --execute/--no-execute
 ```
 

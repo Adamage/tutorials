@@ -11,7 +11,7 @@ def shebang():
     return f"#!/usr/bin/env python3"
 
 
-class PurePythonExporter(Exporter):
+class CodeExporter(Exporter):
     file_extension = '.py'
 
     def __init__(self, **kw):

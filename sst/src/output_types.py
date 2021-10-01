@@ -9,7 +9,7 @@ def supported_types():
 class OutputTypes(str, Enum):
     JUPYTER_TYPE = "jupyter"
     MARKDOWN_TYPE = "markdown"
-    PUREPYTHON_TYPE = "purepython"
+    CODE_TYPE = "code"
 
     def __repr__(self):
         return self.value
@@ -18,6 +18,6 @@ class OutputTypes(str, Enum):
 EXTENSION2TYPE = {
     '.ipynb': OutputTypes.JUPYTER_TYPE,
     '.md': OutputTypes.MARKDOWN_TYPE,
-    '.py': OutputTypes.PUREPYTHON_TYPE
+    '.py': OutputTypes.CODE_TYPE
 }
 TYPE2EXTENSION = {type: extension for extension, type in EXTENSION2TYPE.items()}

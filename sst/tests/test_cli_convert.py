@@ -5,13 +5,12 @@ import pytest
 from click.testing import CliRunner
 
 from src.utils.click import print_exception
-from tests.test_utils.path import get_unit_test_static_files_dir 
+from tests.test_utils.path import get_unit_test_static_files_dir
 from sst import cli
-
 
 STATIC_FILES = get_unit_test_static_files_dir()
 TRIVIAL_MAPPING_SOURCE_PATH = STATIC_FILES / "trivial_mapping_md_code_md.py"
- 
+
 
 @pytest.fixture
 def cli_runner_instance():
@@ -19,7 +18,7 @@ def cli_runner_instance():
 
 
 @pytest.mark.parametrize("type, expected_extension",
-                         [('purepython', '.py'), ('markdown', '.md'), ('jupyter', '.ipynb')])
+                         [('code', '.py'), ('markdown', '.md'), ('jupyter', '.ipynb')])
 @pytest.mark.parametrize("output_filename", ['filename', 'nested/path/filename'])
 def test_cli_positive(cli_runner_instance, tmp_path, type, expected_extension, output_filename):
     outfile_path = tmp_path / output_filename
@@ -38,7 +37,8 @@ def test_cli_positive(cli_runner_instance, tmp_path, type, expected_extension, o
 def test_cli_positive_when_no_type(cli_runner_instance, tmp_path, output_filename):
     outfile_path = tmp_path / output_filename
 
-    result = cli_runner_instance.invoke(cli, ['convert', '--source', TRIVIAL_MAPPING_SOURCE_PATH, "--output", outfile_path])
+    result = cli_runner_instance.invoke(cli,
+                                        ['convert', '--source', TRIVIAL_MAPPING_SOURCE_PATH, "--output", outfile_path])
 
     print_exception(result)
 
@@ -50,14 +50,16 @@ def test_cli_positive_when_no_type(cli_runner_instance, tmp_path, output_filenam
 def test_cli_when_wrong_extension(cli_runner_instance, tmp_path, output_filename):
     outfile_path = tmp_path / output_filename
     with pytest.raises(AssertionError):
-        result = cli_runner_instance.invoke(cli, ['convert', '--source', TRIVIAL_MAPPING_SOURCE_PATH, "--output", outfile_path])
+        result = cli_runner_instance.invoke(cli, ['convert', '--source', TRIVIAL_MAPPING_SOURCE_PATH, "--output",
+                                                  outfile_path])
         if result.exception:
             raise result.exception
 
 
 def test_cli_when_missing_output_extension_or_type(cli_runner_instance):
     with pytest.raises(AttributeError):
-        result = cli_runner_instance.invoke(cli, ['convert', '--source', TRIVIAL_MAPPING_SOURCE_PATH, '--output', 'file'])
+        result = cli_runner_instance.invoke(cli,
+                                            ['convert', '--source', TRIVIAL_MAPPING_SOURCE_PATH, '--output', 'file'])
         if result.exception:
             raise result.exception
 
@@ -82,10 +84,11 @@ def test_py_file_with_import(cli_runner_instance, tmp_path):
     assert generated_markdown == expected_markdown
 
 
-def test_wrong_path_when_purepython(cli_runner_instance):
+def test_wrong_path_when_code_export(cli_runner_instance):
     with pytest.raises(AssertionError) as e_info:
         result = cli_runner_instance.invoke(cli, [
-            'convert', '--source', TRIVIAL_MAPPING_SOURCE_PATH, "--output", TRIVIAL_MAPPING_SOURCE_PATH, "--type", 'purepython'
+            'convert', '--source', TRIVIAL_MAPPING_SOURCE_PATH, "--output", TRIVIAL_MAPPING_SOURCE_PATH, "--type",
+            'code'
         ])
         if result.exception:
             raise result.exception

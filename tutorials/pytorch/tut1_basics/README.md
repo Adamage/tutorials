@@ -1,142 +1,98 @@
-Introduction to PopTorch - running a simple model
-======================================
-
-This tutorial covers the basics of model making in PyTorch, using `torch.nn.Module`, and the specific methods to convert a PyTorch model to a PopTorch model so that it can be run on a Graphcore IPU.
+# Half and mixed precision in PopTorch
+This tutorial shows how to use half and mixed precision in PopTorch with the
+example task of training a simple CNN model on a single
+Graphcore IPU (Mk1 or Mk2).
 
 Requirements:
-   - an installed Poplar SDK. See the Getting Started guide for your IPU hardware for details of how to install the SDK;
-   - Other Python modules: `pip install -r requirements.txt`
+- an installed Poplar SDK. See the Getting Started guide for your IPU
+hardware for details of how to install the SDK;
+- Other Python modules: `pip install -r requirements.txt`
 
-Table of Contents
-=================
-- [What is PopTorch?](#what-is-poptorch)
-- [Getting started: training a model on the IPU](#getting-started-training-a-model-on-the-ipu)
-    - [Import the packages](#import-the-packages)
-    - [Load the data](#load-the-data)
-        - [PopTorch DataLoader](#poptorch-dataloader)
-    - [Build the model](#build-the-model)
-    - [Prepare training for IPUs](#prepare-training-for-ipus)
-    - [Train the model](#train-the-model)
-      - [Training loop](#training-loop)
-      - [Use the same IPU for training and inference](#use-the-same-ipu-for-training-and-inference)
-      - [Save the trained model](#save-the-trained-model)
-    - [Evaluate the model](#evaluate-the-model)
-- [Doing more with `poptorch.Options`](#doing-more-with-poptorchoptions)
-    - [`deviceIterations`](#deviceiterations)
-    - [`replicationFactor`](#replicationfactor)
-    - [`randomSeed`](#randomseed)
-    - [`useIpuModel`](#useipumodel)
-    - [How to set the options](#how-to-set-the-options)
-- [Going further](#going-further)
+# General
 
-# What is PopTorch?
+## Motives for half precision
 
-PopTorch is a set of extensions for PyTorch to enable PyTorch models to run on Graphcore's IPU hardware.
+Data is stored in memory, and some formats to store that data require less memory than others. In a device's memory, 
+when it comes to numerical data, we use either integers or real numbers. Real numbers are represented by one of several 
+floating point formats, which vary in how many bits they use to represent each number. Using more bits allows for 
+greater precision and a wider range of representable numbers, whereas using fewer bits allows for faster calculations 
+and reduces memory and power usage. In deep learning applications, where less precise calculations are acceptable and 
+throughput is critical, using a lower precision format can provide substantial gains in performance.
 
-PopTorch supports both inference and training. To run a model on the IPU you wrap your existing PyTorch model in either a PopTorch inference wrapper or a PopTorch training wrapper. You can provide further annotations to partition the model across multiple IPUs.
+The Graphcore IPU provides native support for two floating-point formats:
 
-You can wrap individual layers in an IPU helper to designate which IPU they should go on. Using your annotations, PopTorch will use [PopART](https://docs.graphcore.ai/projects/popart-user-guide/) to parallelise the model over the given number of IPUs. Additional parallelism can be expressed via a replication factor which enables you to data-parallelise the model over more IPUs.
+- IEEE single-precision, which uses 32 bits for each number (FP32)
+- IEEE half-precision, which uses 16 bits for each number (FP16)
 
-Under the hood PopTorch uses [TorchScript](https://pytorch.org/docs/stable/jit.html), an intermediate representation (IR) of a PyTorch model, using the `torch.jit.trace` API. That means it inherits the constraints of that API. These include:
+Some applications which use FP16 do all calculations in FP16, whereas others use a mix of FP16 and FP32. The latter 
+approach is known as *mixed precision*.
 
-- Inputs must be Torch tensors or tuples/lists containing Torch tensors;
+In this tutorial, we are going to talk about real numbers represented in FP32 and FP16, and how to use these data types 
+(dtypes) in PopTorch in order to reduce the memory requirements of a model.
 
-- None can be used as a default value for a parameter but cannot be explicitly passed as an input value;
+## Numerical stability
 
-- Hooks and `.grad` cannot be used to inspect weights and gradients;
+Numeric stability refers to how a model's performance is affected by the use of a lower-precision dtype. We say an 
+operation is "numerically unstable" in FP16 if running it in this dtype causes the model to have worse accuracy compared
+ to running the operation in FP32. Two techniques that can be used to increase the numerical stability of a model are 
+ loss scaling and stochastic rounding.
 
-- `torch.jit.trace` cannot handle control flow or shape variations within the model. That is, the inputs passed at run-time cannot vary the control flow of the model or the shapes/sizes of results.
+### Loss scaling
 
-To learn more about TorchScript and JIT, you can go through this [tutorial](https://pytorch.org/tutorials/beginner/Intro_to_TorchScript_tutorial.html).
+A numerical issue that can occur when training a model in half-precision is that the gradients can underflow. This can 
+be difficult to debug because the model will simply appear to not be training, and can be especially damaging because 
+any gradients which underflow will propagate a value of 0 backwards to other gradient calculations.
 
-PopTorch has been designed to require few manual alterations to your models in order to run them on IPU. However, it does have some differences from native PyTorch execution. Also, not all PyTorch operations have been implemented by the backend yet. You can find the list of supported operations [here](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/supported_ops.html).
+The standard solution to this is known as *loss scaling*, which consists of scaling up the loss value right before the 
+start of backpropagation to prevent numerical underflow of the gradients. Instructions on how to use loss scaling will 
+be discussed later in this tutorial.
 
-![Software stack](static/stack.jpg)
+### Stochastic rounding
 
-# Getting started: training a model on the IPU
+When training in half or mixed precision, numbers multiplied by each other will need to be rounded in order to fit into 
+the floating point format used. Stochastic rounding is the process of using a probabilistic equation for the rounding. 
+Instead of always rounding to the nearest representable number, we round up or down with a probability such that the 
+expected value after rounding is equal to the value before rounding. Since the expected value of an addition after 
+rounding is equal to the exact result of the addition, the expected value of a sum is also its exact value.
 
-We will do the following steps in order:
+This means that on average, the values of the parameters of a network will be close to the values they would have had if 
+a higher-precision format had been used. The added bonus of using stochastic rounding is that the parameters can be 
+stored in FP16, which means the parameters can be stored using half as much memory. This can be especially helpful when 
+training with small batch sizes, where the memory used to store the parameters is proportionally greater than the memory 
+used to store parameters when training with large batch sizes.
 
-1. Load the Fashion-MNIST dataset using `torchvision.datasets` and `poptorch.DataLoader`
-2. Define a deep CNN  and a loss function using the `torch` API
-3. Train the model on an IPU using `poptorch.trainingModel`
-4. Evaluate the model on the IPU
+It is highly recommended that you enable this feature when training neural networks with FP16 weights. The instructions 
+to enable it in PopTorch are presented later in this tutorial.
 
-### Import the packages
-
-PopTorch is a separate package from PyTorch, and available in Graphcore's Poplar SDK. Both must thus be imported:
+Import the packages
 
 
 ```python
 import torch
-import poptorch
-import torchvision
 import torch.nn as nn
-import matplotlib.pyplot as plt
-from tqdm import tqdm
+import torchvision
+import torchvision.transforms as transforms
+import poptorch
+from tqdm.auto import tqdm
 ```
 
-Under the hood, PopTorch uses Graphcore's high-performance machine learning framework PopART. It is therefore necessary to enable PopART and Poplar in your environment.
+## Build the model
 
->**NOTE**:
->If you forget to enable PopART in your environment, you will encounter the error `ImportError: libpopart.so: cannot open shared object file: No such file or directory` when importing `poptorch`.
->If the error message says something like `libpopart_compiler.so: undefined symbol: _ZN6popart7Session3runERNS_7IStepIOE`, it most likely means the versions of PopART and PopTorch do not match, for example by enabling PopART with a previous SDK release's `enable.sh` script. Make sure to not mix SDK's artifacts.
-
-### Load the data
-
-We will use the Fashion-MNIST dataset made available by the package `torchvision`. This dataset, from [Zalando](https://github.com/zalandoresearch/fashion-mnist), can be used as a more challenging replacement to the well-known MNIST dataset.
-
-The dataset consists of 28x28 grayscale images and labels of range \[0, 9] from 10 classes: T-shirt, trouser, pullover, dress, coat, sandal, shirt, sneaker, bag and ankle boot.
-
-In order for the images to be usable by PyTorch, we have to convert them to `torch.Tensor` objects. To improve overall performance, we will also normalise the data. Furthermore, we will apply both operations, conversion and normalisation, to the datasets using `torchvision.transforms` and feed these ops to `torchvision.datasets`:
+We use the same model as in [the previous tutorials on PopTorch](../). 
+Just like in the [previous tutorial](../tut2_efficient_data_loading), we are using larger images (128x128) to simulate 
+a heavier data load. This will make the difference in memory between FP32 and FP16 meaningful enough to showcase 
+in this tutorial.
 
 
 ```python
-transform = torchvision.transforms.Compose([
-    torchvision.transforms.ToTensor(),
-    torchvision.transforms.Normalize((0.5,), (0.5,))])
-
-train_dataset = torchvision.datasets.FashionMNIST("./datasets/", transform=transform, download=True, train=True)
-test_dataset = torchvision.datasets.FashionMNIST("./datasets/", transform=transform, download=True, train=False)
-classes = ("T-shirt", "Trouser", "Pullover", "Dress", "Coat", "Sandal", "Shirt", "Sneaker", "Bag", "Ankle boot")
-```
-
-With the following method, we can visualise a sample of these images and their associated labels:
-
-
-```python
-plt.figure(figsize=(30, 15))
-for i, (image, label) in enumerate(train_dataset):
-    if i == 15:
-        break
-    image = (image / 2 + .5).numpy() # reverse transformation
-    ax = plt.subplot(5, 5, i + 1)
-    ax.set_title(classes[label])
-    plt.imshow(image[0])
-```
-
-![png](static/from_0_to_1_10_0.png)
-
-##### PopTorch DataLoader
-
-We can feed batches of data into a PyTorch model by simply passing the input tensors. However, this is unlikely to be the most efficient way and can result in data loading being a bottleneck to the model, slowing down the training process. In order to make data loading easier and more efficient, there's the [`torch.utils.data.DataLoader`](https://pytorch.org/docs/stable/data.html) class, which is an iterable over a dataset and which can handle parallel data loading, a sampling strategy, shuffling, etc.
-
-PopTorch offers an extension of this class with its [`poptorch.DataLoader`](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/batching.html#poptorch-dataloader) class, specialised for the way the underlying PopART framework handles batching of data. We will use this class later in the tutorial, as soon as we have a model ready for training.
-
-### Build the model
-
-We will build a simple CNN model for a classification task. To do so, we can simply use PyTorch's API, including `torch.nn.Module`. The difference from what we're used to with pure PyTorch is the _loss computation_, which has to be part of the `forward` function. This is to ensure the loss is computed on the IPU and not on the CPU, and to give us as much flexibility as possible when designing more complex loss functions.
-
-
-```python
-class ClassificationModel(nn.Module):
+class CustomModel(nn.Module):
     def __init__(self):
         super().__init__()
         self.conv1 = nn.Conv2d(1, 5, 3)
         self.pool = nn.MaxPool2d(2, 2)
         self.conv2 = nn.Conv2d(5, 12, 5)
         self.norm = nn.GroupNorm(3, 12)
-        self.fc1 = nn.Linear(972, 100)
+        self.fc1 = nn.Linear(41772, 100)
         self.relu = nn.ReLU()
         self.fc2 = nn.Linear(100, 10)
         self.log_softmax = nn.LogSoftmax(dim=0)
@@ -153,187 +109,370 @@ class ClassificationModel(nn.Module):
         if self.training:
             return x, self.loss(x, labels)
         return x
-
-model = ClassificationModel()
 ```
 
->**NOTE**: `self.training` is inherited from `torch.nn.Module` which initialises its value to `True`. Use `model.eval()` to set it to `False` and `model.train()` to switch it back to `True`.
+>**NOTE:** The model inherits `self.training` from `torch.nn.Module` which initialises its value to True. 
+>Use `model.eval()` to set it to False and `model.train()` to switch it back to True.
 
-### Prepare training for IPUs
+Choose parameters. 
 
-The compilation and execution on the IPU can be controlled using `poptorch.Options`. These options are used by PopTorch's wrappers such as `poptorch.DataLoader` and `poptorch.trainingModel`.
+>**NOTE** If you wish to modify these parameters for educational purposes, make sure you re-run all the cells below
+>this one, including this entire cell as well:
+
+
+```python
+# Cast the model parameters to FP16
+model_half = True
+
+# Cast the data to FP16
+data_half = True
+
+# Cast the accumulation of gradients values types of the optimiser to FP16
+optimizer_half = True
+
+# Use stochasting rounding
+stochastic_rounding = True
+
+# Set partials data type to FP16
+partials_half = True
+```
+
+### Casting a model's parameters
+
+The default data type of the parameters of a PyTorch module is FP32 (`torch.float32`). To convert all the parameters 
+of a model to be represented in FP16 (`torch.float16`), an operation we will call _downcasting_, we simply do:
+
+
+```python
+model = CustomModel()
+
+if model_half:
+    model = model.half()
+```
+
+For this tutorial, we will cast all the model's parameters to FP16.
+
+### Casting a single layer's parameters
+
+For bigger or more complex models, downcasting all the layers may generate numerical instabilities and cause underflows. 
+While the PopTorch and the IPU offer features to alleviate those issues, it is still sensible for those models to cast 
+only the parameters of certain layers and observe how it affects the overall training job. To downcast the parameters of
+ a single layer, we select the layer by its _name_ and use `half()`:
+
+
+```python
+model.conv1 = model.conv1.half()
+```
+
+If you would like to upcast a layer instead, you can use `model.conv1.float()`.
+>**NOTE**: One can print out a list of the components of a PyTorch model, with their names, by doing `print(model)`.
+
+## Prepare the data
+
+We will use the FashionMNIST dataset that we download from `torchvision`. The last stage of the pipeline will have to 
+convert the data type of the tensors representing the images to `torch.half` (equivalent to `torch.float16`) so that 
+our input data is also in FP16. This has the advantage of reducing the bandwidth needed between the host and the IPU.
+
+
+```python
+if data_half:
+    transform = transforms.Compose([transforms.Resize(128),
+                                    transforms.ToTensor(),
+                                    transforms.Normalize((0.5,), (0.5,)),
+                                    transforms.ConvertImageDtype(torch.half)])
+else:
+    transform = transforms.Compose([transforms.Resize(128),
+                                    transforms.ToTensor(),
+                                    transforms.Normalize((0.5,), (0.5,))])
+
+train_dataset = torchvision.datasets.FashionMNIST("./datasets/",
+                                                  transform=transform,
+                                                  download=True,
+                                                  train=True)
+test_dataset = torchvision.datasets.FashionMNIST("./datasets/",
+                                                 transform=transform,
+                                                 download=True,
+                                                 train=False)
+```
+
+If the model has not been converted to half precision, but the input data has, then some layers of the model may be 
+converted to use FP16. Conversely, if the input data has not been converted, but the model has, then the input tensors 
+will be converted to FP16 on the IPU. This behaviour is the opposite of PyTorch's default behaviour.
+
+>**NOTE**: To stop PopTorch automatically downcasting tensors and parameters, so that it preserves PyTorch's default 
+>behaviour (upcasting), use the option:
+>`opts.Precision.halfFloatCasting(poptorch.HalfFloatCastingBehavior.HalfUpcastToFloat)`.
+
+## Optimizers and loss scaling
+
+The value of the loss scaling factor can be passed as a parameter to the optimisers in `poptorch.optim`. In this 
+tutorial, we will set it to 1024 for an AdamW optimizer. For all optimisers (except `poptorch.optim.SGD`), using 
+a model in FP16 requires the argument `accum_type` to be set to `torch.float16` as well:
+
+
+
+```python
+if optimizer_half:
+    optimizer = poptorch.optim.AdamW(model.parameters(),
+                                     lr=0.001,
+                                     loss_scaling=1024,
+                                     accum_type=torch.float16)
+else:
+    optimizer = poptorch.optim.AdamW(model.parameters(),
+                                     lr=0.001,
+                                     accum_type=torch.float32)
+```
+
+While higher values of `loss_scaling` minimize underflows, values that are too high can also generate overflows as well 
+as hurt convergence of the loss. The optimal value depends on the model and the training job. 
+This is therefore a hyperparameter for you to tune.
+
+## Set PopTorch's options
+
+To configure some features of the IPU and to be able to use PopTorch's classes in the next sections, we will need to 
+create an instance of `poptorch.Options` which stores the options we will be using. 
+We covered some of the available options in:
+[introductory tutorial for PopTorch](https://github.com/graphcore/examples/tree/master/tutorials/pytorch/tut1_basics).
+
+Let's initialise our options object before we talk about the options we will use:
 
 
 ```python
 opts = poptorch.Options()
 ```
 
+>**NOTE**: This tutorial has been designed to be run on a single IPU. If you do not have access to an IPU, you can use 
+>the option [`useIpuModel`](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/overview.html#poptorch.Options.useIpuModel) to run a simulation on CPU instead. 
+>You can read more on the IPU Model and its limitations [here](https://docs.graphcore.ai/projects/poplar-user-guide/en/latest/poplar_programs.html#programming-with-poplar).
+
+### Stochastic rounding
+
+With the IPU, stochastic rounding is implemented directly in the hardware and only requires you to enable it. 
+To do so, there is the option `enableStochasticRounding` in the `Precision` namespace of `poptorch.Options`. 
+This namespace holds other options for using mixed precision that we will talk about. 
+To enable stochastic rounding, we do:
+
 
 ```python
-train_dataloader = poptorch.DataLoader(opts, train_dataset, batch_size=16, shuffle=True, num_workers=20)
+if stochastic_rounding:
+    opts.Precision.enableStochasticRounding(True)
 ```
 
-### Train the model
+With the IPU Model, this option won't change anything since stochastic rounding is implemented on the IPU.
 
-We will need another component in order to train our model: an optimiser. Its role is to apply the computed gradients to the model's weights to optimize (usually, minimize) the loss function using a specific algorithm. PopTorch currently provides classes which inherit from multiple native PyTorch optimisation functions: [SGD](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/reference.html#poptorch.optim.SGD), [Adam](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/reference.html#poptorch.optim.Adam), [AdamW](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/reference.html#poptorch.optim.AdamW), [LAMB](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/reference.html#poptorch.optim.LAMB) and [RMSprop](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/reference.html#poptorch.optim.RMSprop). These optimisers provide several advantages over native PyTorch versions. They embed constant attributes to save performance and memory, and allow you to specify additional parameters such as loss/velocity scaling.
+### Partials data type
 
-We will use SGD as it's a very popular algorithm and is appropriate for this classification task.
+Matrix multiplications and convolutions have intermediate states we call _partials_. Those partials can be stored 
+in FP32 or FP16. There is a memory benefit to using FP16 partials but the main benefit is that it can increase 
+the throughput for some models without affecting accuracy. However there is a risk of increasing numerical instability 
+if the values being multiplied are small, due to underflows. The default data type of partials is the input's 
+data type(FP16). For this tutorial, we set partials to FP32 just to showcase how it can be done. 
+We use the option `setPartialsType` to do it:
+
 
 ```python
-optimizer = poptorch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+if partials_half:
+    opts.Precision.setPartialsType(torch.half)
+else:
+    opts.Precision.setPartialsType(torch.float)
 ```
 
-We now introduce the `poptorch.trainingModel` wrapper, which will handle the training. It takes an instance of a `torch.nn.Module`, such as our custom model, an instance of `poptorch.Options` which we have instantiated previously, and an optimizer. This wrapper will trigger the compilation of our model, using TorchScript, and manage its translation to a program the IPU can run. Let's use it.
+## Train the model
+
+We can now train the model. After we have set all our options, we reuse our `poptorch.Options` instance for 
+the training `poptorch.DataLoader` that we will be using:
 
 
 ```python
-poptorch_model = poptorch.trainingModel(model, options=opts, optimizer=optimizer)
+train_dataloader = poptorch.DataLoader(opts,
+                                       train_dataset,
+                                       batch_size=12,
+                                       shuffle=True,
+                                       num_workers=40)
 ```
 
-#### Training loop
-
-Looping through the training data, running the forward and backward passes, and updating the weights constitute the process we refer to as the "training loop". Graphcore's Poplar system uses several optimisations to accelerate the training loop. Central to this is the desire to minimise interactions between the device (the IPU) and the host (the CPU), allowing the training loop to run on the device independently from the host. To achieve that virtual independence, Poplar creates a _static_ computational graph and data streams which are loaded to the IPU, and then signals the IPU to get started until there's no data left or until the host sends a signal to stop the loop.
-
-![High-level overview of what happens](static/loop.jpg)
-
-The compilation, which transforms our PyTorch model into a computational graph and our dataloader into data streams, happens at the first call of a `poptorch.trainingModel`. The IPUs to which the graph will be uploaded, are selected automatically during this first call, by default. The training loop can then start.
-
-Once the loop has started, Poplar's main task is to feed the data into the streams and to signal when we are done with the loop. The last step will then be to copy the final graph, meaning the model, back to the CPU - a step that PopTorch manages itself.
+We first make sure our model is in training mode, and then wrap it with `poptorch.trainingModel`.
 
 
 ```python
-epochs = 30
+poptorch_model = poptorch.trainingModel(model,
+                                        options=opts,
+                                        optimizer=optimizer)
+```
+
+Let's run the training loop for 10 epochs.
+
+
+```python
+epochs = 10
 for epoch in tqdm(range(epochs), desc="epochs"):
     total_loss = 0.0
     for data, labels in tqdm(train_dataloader, desc="batches", leave=False):
         output, loss = poptorch_model(data, labels)
         total_loss += loss
-```
-
-The model is now trained! There's no need to retrieve the weights from the device as you would do with PyTorch by calling `model.cpu()`. PopTorch has managed that step for us. We can save and evaluate the model on CPU.
-
-#### Use the same IPU for training and inference
-After the model has been attached to the IPU and compiled after the first call to the PopTorch model, it can be detached from the device. This allows PopTorch to use a single device for training and inference (described below), rather than using 2 IPUs (one for training and one for inference) when the device is not detached. When using an IPU-POD system, detaching from the device will be necessary when using a non-reconfigurable partition.
-
-```python
 poptorch_model.detachFromDevice()
 ```
 
-#### Save the trained model
+Our new model is now trained and we can start its evaluation.
 
-We can simply use PyTorch's API to save a model in a file, with the original instance of `ClassificationModel` and not the wrapped model.
+## Evaluate the model
 
-
-```python
-torch.save(model.state_dict(), "classifier.pth")
-```
-
-### Evaluate the model
-
-Since we have detached our model from it's training device, the device is now free again and we can use it for the evaluation stage, instead of using the CPU. It is a good idea to use an IPU when evaluating your model on a CPU is slow - be it because the test dataset is large and/or the model is complex - since IPUs are blazing [fast](https://www.graphcore.ai/posts/new-graphcore-ipu-benchmarks).
-
-The steps taken below to define the model for evaluation essentially allow it to run in inference mode. Therefore, you can follow the same steps to use the model to make predictions once it has been deployed.
-
-For this, it is first essential to switch the model to evaluation mode. This step is realised as usual.
+Some PyTorch's operations, such as CNNs, are not supported in FP16 on the CPU, so we will evaluate our fine-tuned model 
+in mixed precision on an IPU using `poptorch.inferenceModel`.
 
 
 ```python
-model = model.eval()
-```
-
-
-To evaluate the model on the IPU, we will use the `poptorch.inferenceModel` class, which has a similar API to `poptorch.trainingModel` except that it doesn't need an optimizer, allowing evaluation of the model without calculating gradients.
-
-
-```python
+model.eval()
 poptorch_model_inf = poptorch.inferenceModel(model, options=opts)
+test_dataloader = poptorch.DataLoader(opts,
+                                      test_dataset,
+                                      batch_size=32,
+                                      num_workers=40)
 ```
 
-
-Then we can instantiate a new PopTorch dataloader object as before in order to efficiently batch our test dataset.
-
-
-```python
-test_dataloader = poptorch.DataLoader(opts, test_dataset, batch_size=32, num_workers=10)
-```
-
-
-Next, this short loop over the test dataset is effectively all that is needed to run the model and generate some predictions. When running the model in inference, we can stop here and use the predictions as needed.
-
-For evaluation, we can use scikit-learn's standard classification metrics to understand how well our model is performing. This usually takes a list of labels and a list of predictions as the input, both in the same order. Let's make both lists, and run our model in inference mode.
+Run inference on the labelled data
 
 
 ```python
 predictions, labels = [], []
-
 for data, label in test_dataloader:
-    predictions += poptorch_model_inf(data).data.max(dim=1).indices
+    predictions += poptorch_model_inf(data).data.float().max(dim=1).indices
     labels += label
+poptorch_model_inf.detachFromDevice()
 ```
 
-A simple and widely-used performance metric for classification models is the accuracy score, which simply counts how many predictions were right. But this metric alone isn't enough. For example, it doesn't tell us how the model performs with regard to the different classes in our data. We will therefore use another popular metric: a confusion matrix, which tells how much our model confuses a class for another.
+We obtained an accuracy of approximately 84% on the test dataset.
 
 
 ```python
-from sklearn.metrics import accuracy_score, confusion_matrix, ConfusionMatrixDisplay
-
-print(f"Eval accuracy: {100 * accuracy_score(labels, predictions):.2f}%")
-
-cm = confusion_matrix(labels, predictions)
-cm_plot = ConfusionMatrixDisplay(cm, display_labels=classes).plot(xticks_rotation='vertical')
+print(f"""Eval accuracy on IPU: {100 *
+                (1 - torch.count_nonzero(torch.sub(torch.tensor(labels),
+                torch.tensor(predictions))) / len(labels)):.2f}%""")
 ```
 
-    Eval accuracy: 89.32%
+    Eval accuracy on IPU: 83.13%
 
 
+# Visualise the memory footprint
 
+We can visually compare the memory footprint on the IPU of the model trained in FP16 and FP32, 
+thanks to Graphcore's [PopVision Graph Analyser](https://docs.graphcore.ai/projects/graphcore-popvision-user-guide/en/latest/graph/graph.html).
 
-![png](static/from_0_to_1_33_1.png)
+We generated memory reports of the same training session as covered in this tutorial for both cases: with and without 
+downcasting the model with `model.half()`. Here is the figure of both memory footprints, where "source" and "target" 
+represent the model trained in FP16 and FP32 respectively:
 
+![Comparison of memory footprints](static/MemoryDiffReport.png)
 
+We observed a ~26% reduction in memory usage with the settings of this tutorial, including from peak to peak. 
+The impact on the accuracy was also small, with less than 1% lost!
 
-As you can see, although we've got an accuracy score of ~88%, the model's performance across the different classes isn't equal. Trousers are very well classified, with more than 96-97% accuracy whereas shirts are harder to classify with less than 60% accuracy, and it seems they often get confused with T-shirts, pullovers and coats. So, some work's still required here to improve your model for all the classes!
+# Debug floating-point exceptions
 
-We can save this visualisation of the confusion matrix.
+Floating-point issues can be difficult to debug because the model will simply appear to not be training without specific
+ information about what went wrong. For more detailed information on the issue we set `debug.floatPointOpException` 
+ to true in the environment variable `POPLAR_ENGINE_OPTIONS`. To set this, you can add the folowing before the command 
+ you use to run your model:
+
+```python
+POPLAR_ENGINE_OPTIONS='{"debug.floatPointOpException": "true"}'
+```
+
+# PopTorch tracing and casting
+
+Because PopTorch relies on the `torch.jit.trace` API, it is limited to tracing operations which run on the CPU. 
+Many of these operations do not support FP16 inputs due to numerical stability issues. 
+To allow the full range of operations, PopTorch converts all FP16 inputs to FP32 before tracing and then restores 
+them to FP16. This is because the model must always be traced with FP16 inputs converted to FP32.
+
+PopTorch’s default casting functionality is to output in FP16 if any input of the operation is FP16. 
+This is opposite to PyTorch, which outputs in FP32 if any input of the operations is in FP32. 
+To achieve the same behaviour in PopTorch, one can use:
+`opts.Precision.halfFloatCasting(poptorch.HalfFloatCastingBehavior.HalfUpcastToFloat)`.
+Below you can see the difference between native PyTorch and PopTorch (with and without the option mentioned above):
+
 
 
 ```python
-cm_plot.figure_.savefig("confusion_matrix.png")
+class Model(torch.nn.Module):
+    def forward(self, x, y):
+        return x + y
+
+native_model = Model()
+
+float16_tensor = torch.tensor([1.0], dtype=torch.float16)
+float32_tensor = torch.tensor([1.0], dtype=torch.float32)
+
+# Native PyTorch results in a FP32 tensor
+assert native_model(float32_tensor, float16_tensor).dtype == torch.float32
+
+opts = poptorch.Options()
+
+# PopTorch results in a FP16 tensor
+poptorch_model = poptorch.inferenceModel(native_model, opts)
+assert poptorch_model(float32_tensor, float16_tensor).dtype == torch.float16
+
+opts.Precision.halfFloatCasting(
+    poptorch.HalfFloatCastingBehavior.HalfUpcastToFloat)
+
+# The option above makes the same PopTorch example result in an FP32 tensor
+poptorch_model = poptorch.inferenceModel(native_model, opts)
+assert poptorch_model(float32_tensor, float16_tensor).dtype == torch.float32
 ```
 
-# Doing more with `poptorch.Options`
+    
+Graph compilation:   0%|          | 0/100 [00:00<?]
 
-This class encapsulates the options that PopTorch and PopART will use alongside our model. Some concepts, such as "batch per iteration" are specific to the functioning of the IPU, and within this class some calculations are made to reduce risks of errors and make it easier for PyTorch users to use IPUs.
+    
+Graph compilation:  42%|████▏     | 42/100 [00:00<00:00]
 
-The list of these options is available in the [documentation](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/overview.html#options). Let's introduce here 4 of these options to get an idea of what they cover.
+    
+Graph compilation:  71%|███████   | 71/100 [00:00<00:00]
 
-### `deviceIterations`
+    
+Graph compilation:  92%|█████████▏| 92/100 [00:00<00:00]
 
-Remember the training loop we have discussed previously. A device iteration is one cycle of that loop, which runs entirely on the IPU (the device), and which starts with a new batch of data. This option specifies the number of batches that is prepared by the host (CPU) for the IPU. The higher this number, the less the IPU has to interact with the CPU, for example to request and wait for data, so that the IPU can loop faster. However, the user will have to wait for the IPU to go over all the iterations before getting the results back. The maximum is the total number of batches in your dataset, and the default value is 1.
+    
+Graph compilation: 100%|██████████| 100/100 [00:00<00:00]
 
-### `replicationFactor`
+    
 
-This is the number of replicas of a model. A replica is a copy of a same model on multiple devices. We use replicas as an implementation of data parallelism, where the same model is served with several batches of data at the same time but on different devices, so that the gradients can be pooled. To achieve the same behaviour in pure PyTorch, you'd wrap your model with `torch.nn.DataParallel`, but with PopTorch, this is an option. Of course, each replica requires one IPU. So, if the `replicationFactor` is two, two IPUs are required.
 
-### `randomSeed`
+    
+Graph compilation:   0%|          | 0/100 [00:00<?]
 
-An advantage of the IPU architecture is an on-device pseudo-random number generator (PRNG). This option sets both the seed for the PRNG on the IPU and PyTorch's seed, which is usually set using `torch.manual_seed`.
+    
+Graph compilation:  42%|████▏     | 42/100 [00:00<00:00]
 
-### `useIpuModel`
+    
+Graph compilation:  71%|███████   | 71/100 [00:00<00:00]
 
-An IPU Model is a simulation, running on a CPU, of an actual IPU. This can be helpful if you're working in an environment where no IPUs are available but still need to make progress on your code. However, the IPU Model doesn't fully support replicated graphs and its numerical results can be slightly different from what you would get with an actual IPU. You can learn more about the IPU Model and its limitations with our [documentation](https://docs.graphcore.ai/projects/poplar-user-guide/en/latest/poplar_programs.html?highlight=ipu%20model#programming-with-poplar).
+    
+Graph compilation:  94%|█████████▍| 94/100 [00:00<00:00]
 
-### How to set the options
+    
+Graph compilation: 100%|██████████| 100/100 [00:00<00:00]
 
-These options are callable, and chainable as they return the instance. One can therefore do as follows:
+    
+
+
+# Summary
+- Use half and mixed precision when you need to save memory on the IPU.
+- You can cast a PyTorch model or a specific layer to FP16 using:
+    ```python
+    # Model
+    model.half()
+    # Layer
+    model.layer.half()
+    ```
+- Several features are available in PopTorch to improve the numerical stability of a model in FP16:
+    - Loss scaling: `poptorch.optim.SGD(..., loss_scaling=1000)`
+    - Stochastic rounding: `opts.Precision.enableStochasticRounding(True)`
+    - Upcast partials data types: `opts.Precision.setPartialsType(torch.float)`
+- The [PopVision Graph Analyser](https://docs.graphcore.ai/projects/graphcore-popvision-user-guide/en/latest/graph/graph.html) can be used to inspect the memory usage of a model and to help debug issues.
+
 
 
 ```python
-opts = poptorch.Options().deviceIterations(20).replicationFactor(2).randomSeed(123).useIpuModel(True)
+
 ```
-
-# Going further
-
-Other tutorials will be made available in the future to explore more advanced features and use cases for PopTorch. Make sure you've subscribed to our [newsletter](https://www.graphcore.ai/) to stay up to date.
-
-In the meantime, to learn more about the IPU and the lower level Poplar libraries and graph programming framework, you can go through our Poplar tutorials and read our Poplar SDK overview.

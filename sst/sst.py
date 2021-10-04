@@ -6,8 +6,8 @@ from tqdm import tqdm
 
 from src.execute import execute_conversion, execute_multiple_conversions
 from src.output_types import OutputTypes, supported_types
-from src.utils.file import set_output_extension_and_type
-from src.constants import CODE_SUFFIX
+from src.utils.file import set_output_extension_and_type, output_path_jupyter, output_path_code, output_path_markdown
+from src.constants import README_FILE_NAME
 
 
 @click.group()
@@ -40,8 +40,11 @@ def convert(source: Path, output: Path, type: OutputTypes, execute: bool) -> Non
 @cli.command()
 @click.option('--source', '-s', required=True, type=Path,
               help='Absolute or relative path to python file to be converted')
-@click.option('--output-dir', '-o', required=False, type=Path, help='Absolute or relative path to output directory.')
-def convert2all(source: Path, output_dir: Path) -> None:
+@click.option('--output-dir', '-o', required=False, type=Path,
+              help='Absolute or relative path to output directory.')
+@click.option('--markdown-name', '-m', required=False, type=Path, default=README_FILE_NAME,
+              help='Custom name for output Markdown file.')
+def convert2all(source: Path, output_dir: Path, markdown_name: str) -> None:
     """
     Transforms source python file automatically into three specified formats with specified configuration:
     jupyter notebook, executed markdown file and python code script.
@@ -53,10 +56,12 @@ def convert2all(source: Path, output_dir: Path) -> None:
 
     output_filename = output_dir / source.stem
 
+    markdown_filename = output_dir / markdown_name
+
     configuration = [
-        [output_filename.with_suffix('.md'), OutputTypes.MARKDOWN_TYPE, True],
-        [output_filename.with_name(source.stem + CODE_SUFFIX).with_suffix('.py'), OutputTypes.CODE_TYPE, False],
-        [output_filename.with_suffix('.ipynb'), OutputTypes.JUPYTER_TYPE, False]
+        [output_path_markdown(markdown_filename), OutputTypes.MARKDOWN_TYPE, True],
+        [output_path_code(output_filename), OutputTypes.CODE_TYPE, False],
+        [output_path_jupyter(output_filename), OutputTypes.JUPYTER_TYPE, False]
     ]
 
     for outfile, output_type, execution in tqdm(configuration):

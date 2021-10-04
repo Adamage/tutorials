@@ -2,6 +2,8 @@
 from pathlib import Path
 from typing import Tuple
 
+from src.constants import CODE_SUFFIX
+
 from src.output_types import OutputTypes, EXTENSION2TYPE, TYPE2EXTENSION, supported_types
 
 
@@ -30,3 +32,15 @@ def set_output_extension_and_type(output: Path, type: OutputTypes) -> Tuple[Path
         )
 
     return output, type
+
+
+def output_path_jupyter(output_path: Path):
+    return output_path.with_suffix('.ipynb')
+
+
+def output_path_markdown(output_path: Path):
+    return output_path.with_suffix('.md')
+
+
+def output_path_code(output_path: Path):
+    return output_path.with_name(output_path.stem + CODE_SUFFIX).with_suffix('.py')

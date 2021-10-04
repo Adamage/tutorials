@@ -74,6 +74,20 @@ for _ in range(1000):
 # sst_hide_output
 ```
 
+#### Special handling
+This tool implements special handling for few particular cases of words or technical elements that will be handled in 
+a characteristic way.
+
+>**Shebangs**
+> 
+>When a script contains lines, which start with `#!`, the whole line will be removed from all outputs.
+
+>**Copyright notice**
+> 
+> All markdown cells with word `copyright` (case-insensitive) will be removed from Markdown output type, while in other 
+> types it will remain.
+
+
 ## Transformation to other formats
 By default, beyond python file that is single source of truth we would like to store in the repository:
 - jupyter notebook which was not executed 

@@ -9,7 +9,6 @@ from nbformat import NotebookNode
 from src.format_converter import py_to_ipynb
 from tests.test_utils.path import get_unit_test_static_files_dir
 
-
 STATIC_FILES = get_unit_test_static_files_dir()
 
 
@@ -17,7 +16,7 @@ STATIC_FILES = get_unit_test_static_files_dir()
     "file_name",
     ['trivial_mapping_md_code_md', 'just_py_method', 'two_markdowns', 'comments_before_markdown'],
 )
-def test_trivial_mapping_md_code_md(file_name):
+def test_py2json(file_name):
     python_file_path, json_file_path = Path(file_name + '.py'), Path(file_name + '.json')
 
     file_py = (STATIC_FILES / python_file_path).read_text()

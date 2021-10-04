@@ -7,4 +7,5 @@ NBCONVERT_RESOURCE_OUTPUT_DIR_KEY = 'output_files_dir'
 NBCONVERT_RESOURCE_OUTPUTS_KEY = 'outputs'
 IMAGES_DIR = 'outputs'
 
-CODE_SUFFIX = '_code'
+CODE_SUFFIX = '_code_only'
+README_FILE_NAME = 'README.md'

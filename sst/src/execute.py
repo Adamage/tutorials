@@ -10,9 +10,7 @@ from src.constants import NBCONVERT_RESOURCE_OUTPUT_EXT_KEY, IMAGES_DIR, NBCONVE
 from src.exporter.factory import exporter_factory
 from src.format_converter import py_to_ipynb
 from src.output_types import supported_types, OutputTypes
-from src.utils.file import set_output_extension_and_type
-
-from src.constants import CODE_SUFFIX
+from src.utils.file import set_output_extension_and_type, output_path_code
 
 
 def execute_conversion(source: Path, output: Path, output_type: OutputTypes, execute: bool):
@@ -49,8 +47,7 @@ def execute_multiple_conversions(source_directory: Path, output_directory: Path,
         for supported_type in tqdm(supported_types(), desc="SST Config", leave=False):
             output, output_type = set_output_extension_and_type(output_directory / tc.name, supported_type)
 
-            if output_type == OutputTypes.CODE_TYPE:
-                output = output.with_name(output.stem + CODE_SUFFIX)
+            output = output_path_code(output) if output_type == OutputTypes.CODE_TYPE else output
 
             execute_conversion(
                 execute=execute if supported_type is OutputTypes.MARKDOWN_TYPE else False,

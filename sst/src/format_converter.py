@@ -6,7 +6,7 @@ from typing import List
 from nbformat import NotebookNode
 from nbformat.v4 import new_notebook, new_markdown_cell, new_code_cell
 
-from src.constants import CELL_SEPARATOR, SST_HIDE_OUTPUT_TAG
+from src.constants import CELL_SEPARATOR, SST_HIDE_OUTPUT_TAG, SHEBANG_MARKER
 
 
 class CellType(Enum):
@@ -37,39 +37,28 @@ def py_to_ipynb(py_file_text: str) -> NotebookNode:
     cell_lines = []
 
     for line in py_file_text.splitlines():
-        if not line.startswith(CELL_SEPARATOR):
+        if not (line.startswith(CELL_SEPARATOR) or line.startswith(SHEBANG_MARKER)):
             cell_lines.append(line)
-            continue
 
-        if cell_lines:
-            new_cell = create_cell_from_lines(cell_lines=cell_lines, cell_type=current_cell_type)
-            cells.append(new_cell)
-            cell_lines = []
+        if line.startswith(CELL_SEPARATOR):
 
-        if current_cell_type == CellType.CODE:
-            current_cell_type = CellType.MARKDOWN
-        elif current_cell_type == CellType.MARKDOWN:
-            current_cell_type = CellType.CODE
+            if cell_lines:
+                new_cell = create_cell_from_lines(cell_lines=cell_lines, cell_type=current_cell_type)
+                cells.append(new_cell)
+                cell_lines = []
+
+            if current_cell_type == CellType.CODE:
+                current_cell_type = CellType.MARKDOWN
+            elif current_cell_type == CellType.MARKDOWN:
+                current_cell_type = CellType.CODE
 
     if cell_lines:
         new_cell = create_cell_from_lines(cell_lines, current_cell_type)
         cells.append(new_cell)
 
-    cells = remove_shebang(cells)
-
     notebook = new_notebook(cells=cells)
 
     return notebook
-
-
-def remove_shebang(cells: List[NotebookNode]) -> List[NotebookNode]:
-    """
-    Args:
-        cells - list of notebook cells
-    """
-    if cells and cells[0].source.startswith("#!"):
-        cells = cells[1:]
-    return cells
 
 
 def create_cell_from_lines(cell_lines: List[str], cell_type: CellType) -> NotebookNode:

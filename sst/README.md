@@ -96,15 +96,18 @@ By default, beyond python file that is single source of truth we would like to s
 
 You can automatically generate all 3 formats by using the command:
 ```bash
-sst convert2all --source path_to_your_python_file --output-dir path_to_your_directory
+sst convert2all \
+ --source path_to_your_python_file \
+ --output-dir path_to_your_directory \
+ --markdown-name XYZ            # [Optional with default 'README.md']
 ```
-The resulting files will have the same names as the input file with a different extension. 
-The exception is the transformation to python code, in which case to avoid overwriting the source file the suffix `_code`
-will be added to it. Example result will be placed under:
+The resulting files will have the same names as the input file with a different extension, with two exceptions:
+- the Markdown output, which is either 'README.md' or custom provided name using the optional argument `markdown-name.`
+- the Python output code, in which case to avoid overwriting the source file the suffix `_code_only` will be added to it. Example result will be placed under:
 ```bash
-path_to_your_directory/source_file_name.md
+path_to_your_directory/XYZ.md
 path_to_your_directory/source_file_name.ipynb
-path_to_your_directory/source_file_name_code.py
+path_to_your_directory/source_file_name_code_only.py
 ```
 
 If you would like to create each of these format files separately use:

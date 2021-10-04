@@ -15,7 +15,7 @@ STATIC_FILES = get_unit_test_static_files_dir()
 
 @pytest.mark.parametrize(
     "file_name",
-    ['trivial_mapping_md_code_md', 'just_py_method', 'two_markdowns'],
+    ['trivial_mapping_md_code_md', 'just_py_method', 'two_markdowns', 'comments_before_markdown'],
 )
 def test_trivial_mapping_md_code_md(file_name):
     python_file_path, json_file_path = Path(file_name + '.py'), Path(file_name + '.json')

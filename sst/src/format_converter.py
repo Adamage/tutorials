@@ -100,4 +100,5 @@ def is_code_or_markdown(line: str) -> bool:
         bool, True if it does not contain some special tag
     """
     return not line.startswith(CELL_SEPARATOR) and \
-           not line.startswith(SHEBANG_MARKER)
+           not line.startswith(SHEBANG_MARKER) and \
+           not SST_HIDE_OUTPUT_TAG in line

@@ -5,7 +5,7 @@ import re
 import pytest
 from click.testing import CliRunner
 
-from src.constants import COPYRIGHT_TAG
+from src.constants import COPYRIGHT_TAG, SST_HIDE_OUTPUT_TAG
 from src.utils.click import print_exception
 from sst import cli
 from tests.test_utils.path import get_unit_test_static_files_dir
@@ -116,6 +116,7 @@ def test_cli_positive_markdown_output_removal_by_tags(cli_runner_instance, tmp_p
         assert "Goodbye sunshine2!" not in actual_contents
         assert "Hello sunshine3!" not in actual_contents
         assert "Goodbye sunshine4!" not in actual_contents
+        assert SST_HIDE_OUTPUT_TAG not in actual_contents
 
 
 def test_cli_positive_markdown_output(cli_runner_instance, tmp_path):

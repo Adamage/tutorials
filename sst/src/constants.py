@@ -11,4 +11,4 @@ IMAGES_DIR = 'outputs'
 CODE_SUFFIX = '_code_only'
 README_FILE_NAME = 'README.md'
 
-REGEX_COPYRIGHT_PATTERN = r'.*(copyright).*'
+REGEX_COPYRIGHT_PATTERN = r'[\S\s]*(copyright)[\S\s]*'

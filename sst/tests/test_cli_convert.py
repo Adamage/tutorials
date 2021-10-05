@@ -119,7 +119,7 @@ def test_cli_positive_markdown_output_removal_by_tags(cli_runner_instance, tmp_p
         assert SST_HIDE_OUTPUT_TAG not in actual_contents
 
 
-def test_cli_positive_markdown_output(cli_runner_instance, tmp_path):
+def test_cli_positive_markdown_output_removal_by_regex_copyright(cli_runner_instance, tmp_path):
     example_input = STATIC_FILES / "copyright_removal.py"
     outfile = tmp_path / 'output'
     outfile_path = tmp_path / 'output.md'
@@ -138,7 +138,7 @@ def test_cli_positive_markdown_output(cli_runner_instance, tmp_path):
     assert copyright_occurrences == 0
 
 
-def test_cli_positive_code_only_output(cli_runner_instance, tmp_path):
+def test_cli_positive_code_only_output_removal_by_regex_copyright(cli_runner_instance, tmp_path):
     example_input = STATIC_FILES / "copyright_removal.py"
     outfile = tmp_path / 'output'
     outfile_path = tmp_path / 'output.py'

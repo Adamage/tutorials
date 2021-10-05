@@ -1,4 +1,23 @@
 """
+Copyright (c) 2021 Graphcore Ltd. All rights reserved.
+
+Copyright holder unknown (author: François Chollet 2015)
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+This file has been modified by Graphcore Ltd.
+"""
+"""
 # Keras tutorial: How to run on IPU
 """
 """
@@ -18,6 +37,9 @@ Refer to the Getting Started guide for your IPU System for instructions.
 
 * `completed_demos`: Completed versions of the scripts described in this tutorial
 * `completed_example`: A completed example of running Keras models on the IPU
+* `demo.py`: A demonstration script, where code is edited to illustrate the 
+differences between running a Keras model on the CPU and IPU
+* `README.md`: This file
 * `test`: A directory that contains test scripts
 """
 """

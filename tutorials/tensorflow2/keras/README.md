@@ -15,6 +15,9 @@ Refer to the Getting Started guide for your IPU System for instructions.
 
 * `completed_demos`: Completed versions of the scripts described in this tutorial
 * `completed_example`: A completed example of running Keras models on the IPU
+* `demo.py`: A demonstration script, where code is edited to illustrate the 
+differences between running a Keras model on the CPU and IPU
+* `README.md`: This file
 * `test`: A directory that contains test scripts
 
 #### Keras MNIST example

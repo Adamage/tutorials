@@ -5,7 +5,7 @@ import re
 import pytest
 from click.testing import CliRunner
 
-from src.constants import COPYRIGHT_TAG, SST_HIDE_OUTPUT_TAG
+from src.constants import SST_HIDE_OUTPUT_TAG, COPYRIGHT_TAG
 from src.utils.click import print_exception
 from sst import cli
 from tests.test_utils.path import get_unit_test_static_files_dir
@@ -135,7 +135,7 @@ def test_cli_positive_markdown_output(cli_runner_instance, tmp_path):
     assert "I am the markdown!" in markdown_content
 
     copyright_occurrences = len(list(re.finditer(COPYRIGHT_TAG, markdown_content.lower())))
-    assert copyright_occurrences == 5
+    assert copyright_occurrences == 0
 
 
 def test_cli_positive_code_only_output(cli_runner_instance, tmp_path):

@@ -1,28 +1,32 @@
 # Copyright (c) 2021 Graphcore Ltd. All rights reserved.
-from nbconvert import Exporter, NotebookExporter
+from nbconvert import Exporter, NotebookExporter, MarkdownExporter
 from nbconvert.preprocessors import TagRemovePreprocessor, ExtractOutputPreprocessor
 from traitlets.config import Config
 
 from src.exporter.code_exporter import CodeExporter
 from src.exporter.execute_preprocessor_with_progress_bar import ExecutePreprocessorWithProgressBar
-from src.exporter.markdown_exporter import MarkdownExporterWrapper
-from src.exporter.preprocessors import configure_tag_removal_preprocessor, configure_extract_outputs_preprocessor
+from src.exporter.preprocessors import configure_tag_removal_preprocessor, \
+    configure_extract_outputs_preprocessor, \
+    configure_copyright_regex_removal_preprocessor, \
+    RegexWithFlagsRemovePreprocessor
 from src.output_types import OutputTypes
 
 
 def markdown_exporter_with_preprocessors(execute_enabled: bool) -> Exporter:
-    exporter = MarkdownExporterWrapper()
+    exporter = MarkdownExporter()
     exporter.register_preprocessor(ExecutePreprocessorWithProgressBar(), enabled=execute_enabled)
 
     config = Config()
     for apply_configuration in [
         configure_tag_removal_preprocessor,
+        configure_copyright_regex_removal_preprocessor,
         configure_extract_outputs_preprocessor
     ]:
         config = apply_configuration(config)
 
     for preprocessor in [
         TagRemovePreprocessor(config=config),
+        RegexWithFlagsRemovePreprocessor(config=config),
         ExtractOutputPreprocessor(config=config)
     ]:
         exporter.register_preprocessor(preprocessor, enabled=True)

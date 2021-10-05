@@ -2,6 +2,7 @@
 CELL_SEPARATOR = '"""'
 SHEBANG_MARKER = "#!"
 SST_HIDE_OUTPUT_TAG = 'sst_hide_output'
+COPYRIGHT_TAG = 'copyright'
 
 NBCONVERT_RESOURCE_OUTPUT_EXT_KEY = 'output_extension'
 NBCONVERT_RESOURCE_OUTPUT_DIR_KEY = 'output_files_dir'

@@ -4,6 +4,8 @@ import os
 from nbconvert import MarkdownExporter
 from nbformat import NotebookNode
 
+from src.constants import COPYRIGHT_TAG
+
 
 class MarkdownExporterWrapper(MarkdownExporter):
     def __init__(self, **kw):
@@ -16,13 +18,12 @@ class MarkdownExporterWrapper(MarkdownExporter):
     @classmethod
     def update_first_copyright_node(cls, notebook) -> None:
         """
-        Search method with early exit to find the first copyright Markdown node, and transform it into
-        a code cell. This way it will be part of this exporters output.
+        Search method that finds the first copyright Markdown node, and then remove each line which contain copyright tag
         """
         cell_id_to_remove = None
         for cell_id, cell in enumerate(notebook.cells):
-            if 'copyright' in cell.source.lower():
-                lines = filter(lambda line: 'copyright' not in line.lower(), cell.source.splitlines())
+            if COPYRIGHT_TAG in cell.source.lower():
+                lines = filter(MarkdownExporterWrapper.is_copyright_in_line, cell.source.splitlines())
                 new_source = os.linesep.join(lines).strip(os.linesep)
 
                 if new_source:
@@ -34,3 +35,7 @@ class MarkdownExporterWrapper(MarkdownExporter):
 
         if cell_id_to_remove is not None:
             del notebook.cells[cell_id_to_remove]
+
+    @staticmethod
+    def is_copyright_in_line(line):
+        return COPYRIGHT_TAG not in line.lower()

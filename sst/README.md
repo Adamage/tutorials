@@ -84,8 +84,7 @@ a characteristic way.
 
 >**Copyright notice**
 > 
-> Each markdown cell with word `copyright` (case-insensitive) will be removed from Markdown file,
-> while in other types it will remain.
+> Each markdown cell with word `copyright` (case-insensitive) will be removed from Markdown file, while in other types it will remain.
 
 
 ## Transformation to other formats

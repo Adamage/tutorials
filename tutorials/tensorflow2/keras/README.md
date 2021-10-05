@@ -15,9 +15,12 @@ Refer to the Getting Started guide for your IPU System for instructions.
 
 * `completed_demos`: Completed versions of the scripts described in this tutorial
 * `completed_example`: A completed example of running Keras models on the IPU
-* `demo.py`: A demonstration script, where code is edited to illustrate the 
-differences between running a Keras model on the CPU and IPU
 * `README.md`: This file
+* `demo_walkthrough.ipynb`: A version of this tutorial placed in an interactive notebook
+* `demo_walkthrough.py`: Executable python file that is used as a single source 
+to generate README.md and x containing also the tutorial content 
+* `demo.py`: A demonstration script, where code is edited to illustrate the
+differences between running a Keras model on the CPU and IPU
 * `test`: A directory that contains test scripts
 
 #### Keras MNIST example
@@ -113,7 +116,6 @@ model.fit(x_train, y_train, epochs=3, batch_size=batch_size)
 print('\nEvaluation')
 model.evaluate(x_test, y_test, batch_size=batch_size)
 ```
-
 
 #### Running the example on the IPU
 

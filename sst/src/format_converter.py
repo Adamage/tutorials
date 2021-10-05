@@ -1,7 +1,7 @@
 # Copyright (c) 2021 Graphcore Ltd. All rights reserved.
 import os
 from enum import Enum
-from typing import List
+from typing import List, Optional
 
 from nbformat import NotebookNode
 from nbformat.v4 import new_notebook, new_markdown_cell, new_code_cell
@@ -34,18 +34,23 @@ def py_to_ipynb(py_file_text: str) -> NotebookNode:
     cells = []
 
     current_cell_type = CellType.CODE
-    cell_lines = []
+    cell_lines, cell_tags = [], []
 
     for line in py_file_text.splitlines():
-        if not (line.startswith(CELL_SEPARATOR) or line.startswith(SHEBANG_MARKER)):
+
+        if SST_HIDE_OUTPUT_TAG in line and SST_HIDE_OUTPUT_TAG not in cell_tags:
+            cell_tags.append(SST_HIDE_OUTPUT_TAG)
+
+        if is_code_or_markdown(line):
             cell_lines.append(line)
-
-        if line.startswith(CELL_SEPARATOR):
-
+        elif line.startswith(CELL_SEPARATOR):
             if cell_lines:
-                new_cell = create_cell_from_lines(cell_lines=cell_lines, cell_type=current_cell_type)
-                cells.append(new_cell)
-                cell_lines = []
+                new_cell = create_cell_from_lines(cell_lines=cell_lines, cell_type=current_cell_type,
+                                                  cell_tags=cell_tags)
+                if new_cell:
+                    cells.append(new_cell)
+
+                cell_lines, cell_tags = [], []
 
             if current_cell_type == CellType.CODE:
                 current_cell_type = CellType.MARKDOWN
@@ -53,7 +58,7 @@ def py_to_ipynb(py_file_text: str) -> NotebookNode:
                 current_cell_type = CellType.CODE
 
     if cell_lines:
-        new_cell = create_cell_from_lines(cell_lines, current_cell_type)
+        new_cell = create_cell_from_lines(cell_lines=cell_lines, cell_type=current_cell_type, cell_tags=cell_tags)
         cells.append(new_cell)
 
     notebook = new_notebook(cells=cells)
@@ -61,53 +66,39 @@ def py_to_ipynb(py_file_text: str) -> NotebookNode:
     return notebook
 
 
-def create_cell_from_lines(cell_lines: List[str], cell_type: CellType) -> NotebookNode:
+def create_cell_from_lines(cell_lines: List[str], cell_type: CellType, cell_tags: List[str]) -> Optional[NotebookNode]:
     """
     Args:
         cell_lines: List of content in each line
         cell_type: Recognized cell type
+        cell_tags: List of cell tags to add in metadata
 
     Returns:
         NotebookNode which contains specified type and merged content
     """
     source = os.linesep.join(cell_lines)
-    processed_source = source.strip(os.linesep) if cell_type is CellType.CODE else source
-    cell = TYPE2FUNC[cell_type](processed_source)
+    processed_source = source.strip(os.linesep)
 
-    if cell_type == CellType.CODE:
-        cell = handle_cell_tag(cell, SST_HIDE_OUTPUT_TAG)
+    cell = None
+    if processed_source:
+        cell = TYPE2FUNC[cell_type](processed_source)
+
+        if cell_tags:
+            cell.metadata.update({"tags": cell_tags})
 
     return cell
 
 
-def handle_cell_tag(cell: NotebookNode, tag: str) -> NotebookNode:
+def is_code_or_markdown(line: str) -> bool:
     """
-    Adds information about tag into cell data and remove line with tag from text in the cell
+    Decide if the line should be in the result
+
     Args:
-        cell: Cell to be analyzed
-        tag: Tag we look for
+        line: string containing line content
 
     Returns:
-        Updated cell
+        bool, True if it does not contain some special tag
     """
-    if tag in cell.source:
-        cell.metadata.update({"tags": [tag]})
-        cell = remove_from_cell_source(cell, f"# {tag}")
-    return cell
-
-
-def remove_from_cell_source(cell: NotebookNode, string_to_remove: str) -> NotebookNode:
-    """
-    This function will iterate through the source code attached to a Notebook cell. If one of the lines contains
-    the string_to_remove, it is omitted completely.
-    Args:
-        cell: Cell to by analyzed
-        string_to_remove: a string that indicates a single code line should be omitted completely from the cell source
-    """
-    cell.source = os.linesep.join(
-        [
-            line for line in cell.source.splitlines()
-            if string_to_remove not in line
-        ]
-    )
-    return cell
+    return not line.startswith(CELL_SEPARATOR) and \
+           not line.startswith(SHEBANG_MARKER) and \
+           not SST_HIDE_OUTPUT_TAG in line

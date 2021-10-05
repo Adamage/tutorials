@@ -1,12 +1,14 @@
 # Copyright (c) 2021 Graphcore Ltd. All rights reserved.
 import os
+import re
 
 import pytest
 from click.testing import CliRunner
 
+from src.constants import SST_HIDE_OUTPUT_TAG, COPYRIGHT_TAG
 from src.utils.click import print_exception
-from tests.test_utils.path import get_unit_test_static_files_dir
 from sst import cli
+from tests.test_utils.path import get_unit_test_static_files_dir
 
 STATIC_FILES = get_unit_test_static_files_dir()
 TRIVIAL_MAPPING_SOURCE_PATH = STATIC_FILES / "trivial_mapping_md_code_md.py"
@@ -114,6 +116,7 @@ def test_cli_positive_markdown_output_removal_by_tags(cli_runner_instance, tmp_p
         assert "Goodbye sunshine2!" not in actual_contents
         assert "Hello sunshine3!" not in actual_contents
         assert "Goodbye sunshine4!" not in actual_contents
+        assert SST_HIDE_OUTPUT_TAG not in actual_contents
 
 
 def test_cli_positive_markdown_output_removal_by_regex_copyright(cli_runner_instance, tmp_path):
@@ -129,9 +132,10 @@ def test_cli_positive_markdown_output_removal_by_regex_copyright(cli_runner_inst
     assert result.exit_code == 0
 
     markdown_content = outfile_path.read_text()
-    assert "I am the only markdown cell around here!" in markdown_content
-    assert "copyright" not in markdown_content
-    assert "Copyright" not in markdown_content
+    assert "I am the markdown!" in markdown_content
+
+    copyright_occurrences = len(list(re.finditer(COPYRIGHT_TAG, markdown_content.lower())))
+    assert copyright_occurrences == 0
 
 
 def test_cli_positive_code_only_output_removal_by_regex_copyright(cli_runner_instance, tmp_path):

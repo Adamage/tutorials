@@ -31,8 +31,7 @@ class RegexWithFlagsRemovePreprocessor(RegexRemovePreprocessor):
     Extending the nbconvert class because it does not support flags and because it compiles all patterns into one,
     normal annotators like (?i) will not work, because they have to be at the start of a pattern.
     """
-    flag = Enum(values=re.RegexFlag, default_value=re.RegexFlag.UNICODE).tag \
-        (config=True)
+    flag = Enum(values=re.RegexFlag, default_value=re.RegexFlag.UNICODE).tag(config=True)
 
     def __init__(self, **kw):
         super().__init__(**kw)

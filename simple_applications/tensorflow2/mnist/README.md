@@ -55,7 +55,7 @@ plt.tight_layout()
 
 
     
-![png](README-outputs/output_6_0.png)
+![png](mnist_outputs/output_6_0.png)
     
 
 
@@ -105,7 +105,6 @@ APIs as you would with other accelerators, as long as you create the model
 inside the scope of an `IPUStrategy`. In the following code, it is worth 
 noting that the number of steps performed during an epoch must be divisible by 
 the number of steps performed per execution.
-
 
 
 ```python

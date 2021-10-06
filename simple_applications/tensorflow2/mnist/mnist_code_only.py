@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+# Copyright (c) 2021 Graphcore Ltd. All rights reserved.
 import tensorflow as tf
 from matplotlib import pyplot as plt
 
@@ -20,8 +20,11 @@ for i, image, label in zip(range(15), x_train, y_train):
     plt.imshow(image)
 plt.tight_layout()
 
-train_ds = tf.data.Dataset.from_tensor_slices((x_train, y_train)).shuffle(10000).batch(32, drop_remainder=True)
-train_ds = train_ds.map(lambda d, l: (tf.cast(d, tf.float32), tf.cast(l, tf.float32)))
+train_ds = tf.data.Dataset.from_tensor_slices((x_train, y_train))
+train_ds = train_ds.shuffle(10000).batch(32, drop_remainder=True)
+train_ds = train_ds.map(
+    lambda d, l: (tf.cast(d, tf.float32), tf.cast(l, tf.float32))
+)
 train_ds = train_ds.repeat()
 
 def create_model():
@@ -38,7 +41,10 @@ cfg.configure_ipu_system()
 strategy = ipu.ipu_strategy.IPUStrategy()
 with strategy.scope():
     model = create_model()
-    model.compile(loss=keras.losses.SparseCategoricalCrossentropy(), optimizer=keras.optimizers.SGD(),
-                  steps_per_execution=100)
+    model.compile(
+        loss=keras.losses.SparseCategoricalCrossentropy(),
+        optimizer=keras.optimizers.SGD(),
+        steps_per_execution=100
+    )
     model.fit(train_ds, steps_per_epoch=2000, epochs=4)
     

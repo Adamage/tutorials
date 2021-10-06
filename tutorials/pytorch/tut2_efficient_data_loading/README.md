@@ -70,29 +70,28 @@ class ClassificationModel(nn.Module):
         return x
 
 
-if __name__ == '__main__':
-    opts = poptorch.Options()
-    opts.deviceIterations(device_iterations)
-    opts.replicationFactor(replicas)
+opts = poptorch.Options()
+opts.deviceIterations(device_iterations)
+opts.replicationFactor(replicas)
 
-    model = ClassificationModel()
-    training_model = poptorch.trainingModel(
-        model,
-        opts,
-        torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
-    )
+model = ClassificationModel()
+training_model = poptorch.trainingModel(
+    model,
+    opts,
+    torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+)
 
-    # Create a fake dataset from random data
-    features = torch.randn([10000, 1, 128, 128])
-    labels = torch.empty([10000], dtype=torch.long).random_(10)
-    dataset = torch.utils.data.TensorDataset(features, labels)
+# Create a fake dataset from random data
+features = torch.randn([10000, 1, 128, 128])
+labels = torch.empty([10000], dtype=torch.long).random_(10)
+dataset = torch.utils.data.TensorDataset(features, labels)
 ```
 
->**Note**: executing the code within this conditional block:
+>**Note**: executing the code in python script requires an conditional block:
 >```python
 >if __name__ == '__main__':
 >```
->will be necessary to avoid [issues with asynchronous DataLoader](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/batching.html#poptorch-asynchronousdataaccessor)
+>it is necessary to avoid [issues with asynchronous DataLoader](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/batching.html#poptorch-asynchronousdataaccessor)
 , additionally the dataset must be serializable by pickle.
 
 We are using larger images (128x128) to simulate a heavier data load.
@@ -103,16 +102,15 @@ Let’s set up a PopTorch DataLoader with asynchronous mode.
 
 
 ```python
-if __name__ == '__main__':
-    training_data = poptorch.DataLoader(
-        opts,
-        dataset=dataset,
-        batch_size=bs,
-        shuffle=True,
-        drop_last=True,
-        num_workers=num_workers,
-        mode=poptorch.DataLoaderMode.Async
-    )
+training_data = poptorch.DataLoader(
+    opts,
+    dataset=dataset,
+    batch_size=bs,
+    shuffle=True,
+    drop_last=True,
+    num_workers=num_workers,
+    mode=poptorch.DataLoaderMode.Async
+)
 ```
 
 The asynchronous mode of `poptorch.DataLoader` launches the data loading process 
@@ -226,23 +224,22 @@ its maximum throughput.
 
 
 ```python
-if __name__ == '__main__':
-    steps = len(training_data)
+steps = len(training_data)
 
-    t0 = time.time()
-    for i, (data, labels) in enumerate(training_data):
-        a, b = data, labels
-    t1 = time.time()
-    total_time = t1 - t0
+t0 = time.time()
+for i, (data, labels) in enumerate(training_data):
+    a, b = data, labels
+t1 = time.time()
+total_time = t1 - t0
 
-    print(f"Total execution time: {total_time:.2f} s")
+print(f"Total execution time: {total_time:.2f} s")
 
-    items_per_second = (steps * device_iterations * bs * replicas) / total_time
-    print(f"DataLoader throughput: {items_per_second:.2f} items/s")
+items_per_second = (steps * device_iterations * bs * replicas) / total_time
+print(f"DataLoader throughput: {items_per_second:.2f} items/s")
 ```
 
     Total execution time: 0.16 s
-    DataLoader throughput: 61505.60 items/s
+    DataLoader throughput: 58337.86 items/s
 
 
 2)	Evaluate the IPU throughput with synthetic data.
@@ -253,52 +250,49 @@ opts.enableSyntheticData(True)
 
 
 ```python
-if __name__ == '__main__':
-    opts.enableSyntheticData(True)
-    training_model = poptorch.trainingModel(
-        model,
-        opts,
-        poptorch.optim.SGD(model.parameters(), lr=0.001,momentum=0.9)
-    )
-    training_data = poptorch.DataLoader(
-        opts,
-        dataset=dataset,
-        batch_size=bs,
-        shuffle=True,
-        drop_last=True,
-        num_workers=num_workers,
-        mode=poptorch.DataLoaderMode.Async,
-        async_options={"early_preload": True}
-    )
-    steps = len(training_data)
+opts.enableSyntheticData(True)
+training_model = poptorch.trainingModel(
+    model,
+    opts,
+    poptorch.optim.SGD(model.parameters(), lr=0.001,momentum=0.9)
+)
+training_data = poptorch.DataLoader(
+    opts,
+    dataset=dataset,
+    batch_size=bs,
+    shuffle=True,
+    drop_last=True,
+    num_workers=num_workers,
+    mode=poptorch.DataLoaderMode.Async,
+    async_options={"early_preload": True}
+)
+steps = len(training_data)
 
-    print("Compiling + Warmup ...")
-    data_batch, labels_batch = next(iter(training_data))
-    training_model.compile(data_batch, labels_batch)
+data_batch, labels_batch = next(iter(training_data))
+training_model.compile(data_batch, labels_batch)
 ```
 
 
 ```python
-if __name__ == '__main__':
-    print(f"Evaluating: {steps} steps of {device_iterations * bs * replicas} items")
+print(f"Evaluating: {steps} steps of {device_iterations * bs * replicas} items")
 
-    # With synthetic data enabled, no data is copied from the host to the IPU,
-    # so we don't use the dataloader, to prevent influencing the execution
-    # time and therefore the IPU throughput calculation
-    t0 = time.time()
-    for _ in range(steps):
-        training_model(data_batch, labels_batch)
-    t1 = time.time()
-    total_time = t1 - t0
+# With synthetic data enabled, no data is copied from the host to the IPU,
+# so we don't use the dataloader, to prevent influencing the execution
+# time and therefore the IPU throughput calculation
+t0 = time.time()
+for _ in range(steps):
+    training_model(data_batch, labels_batch)
+t1 = time.time()
+total_time = t1 - t0
 
-    items_per_second = (steps * device_iterations * bs * replicas) / total_time
-    print(f"Total execution time: {total_time:.2f} s")
-    print(f"IPU throughput: {items_per_second:.2f} items/s")
+items_per_second = (steps * device_iterations * bs * replicas) / total_time
+print(f"Total execution time: {total_time:.2f} s")
+print(f"IPU throughput: {items_per_second:.2f} items/s")
 ```
 
     Evaluating: 12 steps of 800 items
     Total execution time: 0.29 s
-    IPU throughput: 33392.45 items/s
+    IPU throughput: 33284.27 items/s
 
 
 There will be no data copying onto the device.
@@ -462,18 +456,17 @@ Now we are ready to conduct experiments
 
 
 ```python
-if __name__ == '__main__':
-    print('*** EXPERIMENTS ***')
+print('*** EXPERIMENTS ***')
 
-    print('Global batch size 16 with synthetic data')
-    validate_model_performance(dataset, batch_size=16, replicas=1,
-                               device_iterations=50, num_workers=8,
-                               synthetic_data=True)
+print('Global batch size 16 with synthetic data')
+validate_model_performance(dataset, batch_size=16, replicas=1,
+                           device_iterations=50, num_workers=8,
+                           synthetic_data=True)
 
-    print("\nGlobal batch size 16 with real data:")
-    validate_model_performance(dataset, batch_size=16, replicas=1,
-                               device_iterations=50, num_workers=8,
-                               synthetic_data=False)
+print("\nGlobal batch size 16 with real data:")
+validate_model_performance(dataset, batch_size=16, replicas=1,
+                           device_iterations=50, num_workers=8,
+                           synthetic_data=False)
 
 ```
 
@@ -504,16 +497,15 @@ at a time on a single IPU.
 
 
 ```python
-if __name__ == '__main__':
-    print('\nGlobal batch size 64 with synthetic data:')
-    validate_model_performance(dataset, batch_size=16, replicas=4,
-                               device_iterations=50, num_workers=8,
-                               synthetic_data=True)
+print('\nGlobal batch size 64 with synthetic data:')
+validate_model_performance(dataset, batch_size=16, replicas=4,
+                           device_iterations=50, num_workers=8,
+                           synthetic_data=True)
 
-    print("\nGlobal batch size 64 with real data:")
-    validate_model_performance(dataset, batch_size=16, replicas=4,
-                               device_iterations=50, num_workers=8,
-                               synthetic_data=False)
+print("\nGlobal batch size 64 with real data:")
+validate_model_performance(dataset, batch_size=16, replicas=4,
+                           device_iterations=50, num_workers=8,
+                           synthetic_data=False)
 ```
 
 DataLoader throughput: 131633 items/s  
@@ -522,6 +514,13 @@ Real data throughput: 36088 items/s
 
 This example gave an idea of how increasing the global batch size can improve 
 the throughput.
+
+The runtime script where you can play with the parameters can be found in the 
+file: `tuto_data_loading.py`. Helpful arguments:
+```bash
+--synthetic-data  # Run with IPU-generated synthetic data
+--replicas # Takes an integer parameter to set the number of replicas
+```
 
 # Summary
 - To efficiently load your dataset to the IPU, the best practice is to use the 

@@ -95,6 +95,8 @@ for data, label in test_dataloader:
     predictions += poptorch_model_inf(data).data.max(dim=1).indices
     labels += label
 
+poptorch_model_inf.detachFromDevice()
+
 from sklearn.metrics import accuracy_score, confusion_matrix, \
     ConfusionMatrixDisplay
 

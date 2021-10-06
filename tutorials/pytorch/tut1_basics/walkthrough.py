@@ -27,9 +27,9 @@ the model across multiple IPUs.
 
 You can wrap individual layers in an IPU helper to designate which IPU they 
 should go on. Using your annotations, PopTorch will use [PopART](https://docs.graphcore.ai/projects/popart-user-guide)
-to parallelize the model over the given number of IPUs. Additional parallelism 
+to parallelise the model over the given number of IPUs. Additional parallelism 
 can be expressed via a replication factor which enables you to 
-data-parallelize the model over more IPUs.
+data-parallelise the model over more IPUs.
 
 Under the hood PopTorch uses [TorchScript](https://pytorch.org/docs/stable/jit.html),
 an intermediate representation (IR) of a PyTorch model, using the 
@@ -335,6 +335,10 @@ for data, label in test_dataloader:
     predictions += poptorch_model_inf(data).data.max(dim=1).indices
     labels += label
 # sst_hide_output
+"""
+Release IPU resources again:
+"""
+poptorch_model_inf.detachFromDevice()
 """
 A simple and widely-used performance metric for classification models is the
 accuracy score, which simply counts how many predictions were right. But this

@@ -1,18 +1,26 @@
+"""
+# Copyright (c) 2021 Graphcore Ltd. All rights reserved.
+"""
+"""
 # Efficient data loading with PopTorch
-
+"""
+"""
 This tutorial will present how PopTorch could help to efficiently load data to 
 your model and how to avoid common sources of performance loss from the host. 
 This will also cover the more general notion of batching on IPUs that is also 
 relevant to other frameworks.
-
+"""
+"""
 Requirements:
    - A Poplar SDK environment enabled  (see the [Getting Started](https://docs.graphcore.ai/en/latest/software.html#getting-started) 
    guide for your IPU system)
    - The PopTorch Python library installed
    - `pip install torchvision`
-
+"""
+"""
 ##	PyTorch and PopTorch DataLoader
-
+"""
+"""
 If you are familiar with PyTorch you may have used [torch.utils.data.DataLoader](https://pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader).
 
 PopTorch provides [its own DataLoader](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/batching.html#poptorch-dataloader) 
@@ -29,9 +37,7 @@ about asynchronous mode.
 Let’s load the same model as in [the introductory tutorial on PopTorch](../tut1_basics) 
 and make a random dataset to play with the different IPU parameters.
 
-
-
-```python
+"""
 import argparse
 import time
 
@@ -86,23 +92,21 @@ if __name__ == '__main__':
     features = torch.randn([10000, 1, 128, 128])
     labels = torch.empty([10000], dtype=torch.long).random_(10)
     dataset = torch.utils.data.TensorDataset(features, labels)
-```
-
+"""
 >**Note**: executing the code within this conditional block:
 >```python
 >if __name__ == '__main__':
 >```
 >will be necessary to avoid [issues with asynchronous DataLoader](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/batching.html#poptorch-asynchronousdataaccessor)
 , additionally the dataset must be serializable by pickle.
-
+"""
+"""
 We are using larger images (128x128) to simulate a heavier data load.
 This will cause the input size of the layer `fc1` to change from  
 `self.fc1 = nn.Linear(972, 100)` to `self.fc1 = nn.Linear(41772, 100)` 
 
 Let’s set up a PopTorch DataLoader with asynchronous mode.
-
-
-```python
+"""
 if __name__ == '__main__':
     training_data = poptorch.DataLoader(
         opts,
@@ -113,22 +117,26 @@ if __name__ == '__main__':
         num_workers=num_workers,
         mode=poptorch.DataLoaderMode.Async
     )
-```
 
+"""
 The asynchronous mode of `poptorch.DataLoader` launches the data loading process 
 on a separate process to allow for the data to be preprocessed asynchronously 
 on the CPU to minimize CPU/IPU transfer time. This is why we prefer to use this 
 option when the conditions described in the note above are met.
-
+"""
+"""
 ## Understanding batching with IPU
-
+"""
+"""
 When developing a model for the IPU, you will encounter different notions of 
 batching. Mini-batches, replica batches, global batches... This section will 
 explain how these hyperparameters are related to the IPU and how to compute 
 the number of samples the DataLoader is going to fetch at one step.
-
+"""
+"""
 #### Device iterations
-
+"""
+"""
 This diagram represents a basic execution on 1 IPU with 
 ***n*** device iterations and 1 mini-batch used per iteration.
 ![Device Iterations](static/iterations.png)  
@@ -142,9 +150,11 @@ model (1 step):
 > ```python
 > training_model(data, labels)
 > ```
-
+"""
+"""
 #### Gradient accumulation
-
+"""
+"""
 This parameter must be used with pipelining.  
 A pipelined model consists in splitting the graph into different successive 
 computation stages.
@@ -157,7 +167,8 @@ Here we can see a 4 stage pipeline where 8 mini-batches are being processed.
 ![Gradient accumulation](static/pipeline.png)  
 When we set up a pipelined execution, we overcome the cost of having multiple 
 stages by computing several batches in parallel when the pipeline is full.
-
+"""
+"""
 Every pipeline stage needs to update its weights when the gradients are ready. 
 However, it would be very inefficient to update them after each mini-batch 
 completion. The solution is the following:
@@ -172,9 +183,11 @@ samples processed by ***K***.
 
 More information about gradient accumulation can be found 
 [in the PopTorch User Guide](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/batching.html#poptorch-options-training-gradientaccumulation).
-
+"""
+"""
 #### Replication
-
+"""
+"""
 ![Replication](static/replica.png)  
 Replication describes the process of running multiple instances of the same 
 model simultaneously on different IPUs to achieve data parallelism. A great 
@@ -185,9 +198,11 @@ Then, for one device iteration we have increased by ***M*** the number of
 mini-batches processed.
 The PopTorch Dataloader will ensure that the host is sending each replica a 
 different subset of the dataset.
-
+"""
+"""
 #### Global batch size
-
+"""
+"""
 Because several mini-batches can be processed by one device iteration (that is, 
 for one weight update), we call **global batch size** this total number of 
 samples:
@@ -203,7 +218,8 @@ samples:
 - The number of samples used for the weight update  
                 Global batch size  = Replica batch size x Number of replicas   
                 Global batch size  = Mini-batch size x Number of replicas x Gradient accumulation factor
-
+"""
+"""
 #### How many samples will then be loaded in one step?
 Considering you are iterating through the PopTorch DataLoader:
 ```python
@@ -212,20 +228,20 @@ for data, labels in training_data:
 ```
 For each step, the number of samples contained in `data` and `labels` will be:  
 ***N = Global batch size x Device iterations***
-
+"""
+"""
 ##	Tuning hyperparameters
 
 ### Evaluating the asynchronous DataLoader
-
+"""
+"""
 How to make sure the DataLoader is not a bottleneck for our model throughput?
 In this tutorial we made an example benchmark to answer this question:
 
 1)	Evaluate the asynchronous DataLoader throughput without the IPU.
 We just loop through the DataLoader without running the model so we can estimate 
 its maximum throughput.
-
-
-```python
+"""
 if __name__ == '__main__':
     steps = len(training_data)
 
@@ -239,20 +255,14 @@ if __name__ == '__main__':
 
     items_per_second = (steps * device_iterations * bs * replicas) / total_time
     print(f"DataLoader throughput: {items_per_second:.2f} items/s")
-```
 
-    Total execution time: 0.16 s
-    DataLoader throughput: 61505.60 items/s
-
-
+"""
 2)	Evaluate the IPU throughput with synthetic data.
 To do so we will evaluate the model with synthetic data generated by the IPU using:
 ```python
 opts.enableSyntheticData(True)
 ```
-
-
-```python
+"""
 if __name__ == '__main__':
     opts.enableSyntheticData(True)
     training_model = poptorch.trainingModel(
@@ -275,10 +285,9 @@ if __name__ == '__main__':
     print("Compiling + Warmup ...")
     data_batch, labels_batch = next(iter(training_data))
     training_model.compile(data_batch, labels_batch)
-```
-
-
-```python
+    # sst_hide_output
+"""
+"""
 if __name__ == '__main__':
     print(f"Evaluating: {steps} steps of {device_iterations * bs * replicas} items")
 
@@ -294,13 +303,8 @@ if __name__ == '__main__':
     items_per_second = (steps * device_iterations * bs * replicas) / total_time
     print(f"Total execution time: {total_time:.2f} s")
     print(f"IPU throughput: {items_per_second:.2f} items/s")
-```
 
-    Evaluating: 12 steps of 800 items
-    Total execution time: 0.29 s
-    IPU throughput: 33392.45 items/s
-
-
+"""
 There will be no data copying onto the device.
 Hence, the throughput measured will give an upper bound of the performance. 
 
@@ -321,16 +325,19 @@ compilation time.
 >print("Compiling + Warmup ...")
 >training_model.compile(data, labels)
 >```
-
+"""
+"""
 ### What if the DataLoader throughput is too low?
-
+"""
+"""
 You can:
 - Try using the asynchronous mode of `poptorch.DataLoader`.
 - Try to increase the global batch size or the number of device iterations.
 - Adjust the number of workers.
 - If you are using the asynchronous mode to load a small number of elements 
 per step, you can try to set `miss_sleep_time_in_ms = 0`.
-
+"""
+"""
 Suggestions if the performance drops at the beginning of an epoch: 
 - Re-use workers by setting the DataLoader option `persistent_workers=True`.
 - Make sure `load_indefinitely` is set to `True` (It is the default value).
@@ -355,28 +362,35 @@ training_data = poptorch.DataLoader(opts, dataset=dataset, batch_size=16,
                                     num_workers=8, mode=poptorch.DataLoaderMode.Async,
                                     async_options={"early_preload": True, "miss_sleep_time_in_ms": 0})
 ```
-
+"""
+"""
 ### Device iterations vs global batch size
-
+"""
+"""
 Even if we made sure the DataLoader is not a bottleneck anymore, the strategy 
 we used for batching can be suboptimal. We must keep in mind that increasing 
 the global batch size will improve the IPU utilisation while increasing device 
 iteration will not.
-
+"""
+"""
 #### Case of a training session
-
+"""
+"""
 We have seen that the device can efficiently iterate while taking data prepared 
 by the CPU in a queue. However, one iteration implies gradient computation and 
 weight update on the device. The backward pass is computationally expensive. 
 Then, for training it is recommended to prefer bigger global batch size over 
 many device iterations in order to maximise parallelism.
-
+"""
+"""
 #### Case of an inference session 
-
+"""
+"""
 For inference only, there is no gradient computation and weights are frozen. 
 In that case increasing the number of device iterations and using a smaller 
 global batch-size should not harm.
-
+"""
+"""
 #### Conclusion: Training and inference sessions
 Finally, as a general recommendation these two parameters have to be tuned so 
 your DataLoader can consume all the dataset in the smallest number of steps 
@@ -387,14 +401,17 @@ object:
 # Number of steps necessary to consume the whole dataset
 steps = len(training_data)
 ```
-
+"""
+"""
 For an IterableDataset, the whole dataset is not necessarily consumed. With the 
 `drop_last` argument, elements of the dataset may be discarded. If the batch 
 size does not properly divide the number of elements per worker, the last 
 uncomplete batches will be discarded.
-
+"""
+"""
 ## Experiments
-
+"""
+"""
 We invite you to try these different sets of parameters to assess their effect. 
 We included the throughput we obtained for illustration but it may vary 
 depending on your configuration.  
@@ -402,9 +419,9 @@ depending on your configuration.
 
 We will create a function that uses the previous code and validates the 
 performance of our model 
+"""
 
 
-```python
 def validate_model_performance(dataset, device_iterations=50,
                                batch_size=16, replicas=4, num_workers=8,
                                synthetic_data=False):
@@ -447,10 +464,11 @@ def validate_model_performance(dataset, device_iterations=50,
     total_time = t1 - t0
     items_per_second = (steps * device_iterations * bs * replicas) / total_time
     print(f"IPU throughput: {items_per_second:.2f} items/s")
-```
 
+"""
 Now we are ready to conduct experiments
-
+"""
+"""
 ### Case 1: No bottleneck
 
 - mini-batch size: 16
@@ -459,9 +477,7 @@ Now we are ready to conduct experiments
 - workers: 8
 
 => Global batch size:  16
-
-
-```python
+"""
 if __name__ == '__main__':
     print('*** EXPERIMENTS ***')
 
@@ -475,8 +491,8 @@ if __name__ == '__main__':
                                device_iterations=50, num_workers=8,
                                synthetic_data=False)
 
-```
-
+    # sst_hide_output
+"""
 DataLoader throughput: 43736 items/s  
 Synthetic data throughput: 33964 items/s  
 Real data throughput: 21280 items/s
@@ -488,7 +504,8 @@ limiting. It is actually fine here.
 As mentioned previously, using synthetic data does not include the stream 
 copies on the IPU. It also excludes the synchronisation time with the host. 
 
-
+"""
+"""
 ### Case 2: Larger global batch size with replication
 
 Let’s try to get better training performances by increasing the global batch size.
@@ -501,9 +518,7 @@ at a time on a single IPU.
 - workers: 8
 
 => Global batch size:  64
-
-
-```python
+"""
 if __name__ == '__main__':
     print('\nGlobal batch size 64 with synthetic data:')
     validate_model_performance(dataset, batch_size=16, replicas=4,
@@ -514,15 +529,16 @@ if __name__ == '__main__':
     validate_model_performance(dataset, batch_size=16, replicas=4,
                                device_iterations=50, num_workers=8,
                                synthetic_data=False)
-```
-
+    # sst_hide_output
+"""
 DataLoader throughput: 131633 items/s  
 Synthetic data throughput: 136907 items/s  
 Real data throughput: 36088 items/s  
 
 This example gave an idea of how increasing the global batch size can improve 
 the throughput.
-
+"""
+"""
 # Summary
 - To efficiently load your dataset to the IPU, the best practice is to use the 
 dedicated PopTorch DataLoader.
@@ -531,3 +547,4 @@ loaded.
 - A good way to know if the DataLoader is not a bottleneck is to compare its 
 throughput with the model throughput on synthetic data.
 - Asynchronous mode can provide better performance.
+"""

@@ -13,7 +13,7 @@ test_batch_size = 80
 epochs = 10
 
 # Learning rate
-lr = 0.05
+learning_rate = 0.05
 
 from tqdm.auto import tqdm
 import torch
@@ -30,31 +30,36 @@ urllib.request.install_opener(opener)
 
 local_dataset_path = 'mnist_data/'
 
-training_data = torch.utils.data.DataLoader(
-    torchvision.datasets.MNIST(
+transform_mnist = torchvision.transforms.Compose(
+    [
+        torchvision.transforms.ToTensor(),
+        torchvision.transforms.Normalize((0.1307, ), (0.3081, ))
+    ]
+)
+
+training_dataset = torchvision.datasets.MNIST(
         local_dataset_path,
         train=True,
         download=True,
-        transform=torchvision.transforms.Compose([
-            torchvision.transforms.ToTensor(),
-            torchvision.transforms.Normalize((0.1307, ), (0.3081, ))]
-        )
-    ),
+        transform=transform_mnist
+)
+
+training_data = torch.utils.data.DataLoader(
+    training_dataset,
     batch_size=batch_size * batches_per_step,
     shuffle=True,
     drop_last=True
 )
 
-test_data = torch.utils.data.DataLoader(
-    torchvision.datasets.MNIST(
+test_dataset = torchvision.datasets.MNIST(
         local_dataset_path,
         train=False,
         download=True,
-        transform=torchvision.transforms.Compose([
-            torchvision.transforms.ToTensor(),
-            torchvision.transforms.Normalize((0.1307, ), (0.3081, ))]
-        )
-    ),
+        transform=transform_mnist
+)
+
+test_data = torch.utils.data.DataLoader(
+    test_dataset,
     batch_size=test_batch_size,
     shuffle=True,
     drop_last=True
@@ -104,20 +109,19 @@ class TrainingModelWithLoss(torch.nn.Module):
 
     def forward(self, args, loss_inputs=None):
         output = self.model(args)
-        if loss_inputs is None:
-            return output
-        else:
-            loss = self.loss(output, loss_inputs)
-            return output, loss
+        loss = self.loss(output, loss_inputs)
+        return output, loss
 
 model = Network()
 model_with_loss = TrainingModelWithLoss(model)
 model_opts = poptorch.Options().deviceIterations(batches_per_step)
 
+print(model_with_loss)
+
 training_model = poptorch.trainingModel(
     model_with_loss,
     model_opts,
-    optimizer=optim.SGD(model.parameters(), lr=lr)
+    optimizer=optim.SGD(model.parameters(), lr=learning_rate)
 )
 
 def accuracy(predictions, labels):
@@ -128,16 +132,16 @@ def accuracy(predictions, labels):
     return accuracy
 
 nr_batches = len(training_data)
-for epoch in range(1, epochs+1):
-    print("Epoch {0}/{1}".format(epoch, epochs))
+
+for epoch in tqdm(range(1, epochs+1), leave=True, desc="Epochs", total=epochs):
     with tqdm(training_data, total=nr_batches, leave=False) as bar:
         for data, labels in bar:
             preds, losses = training_model(data, labels)
-            with torch.no_grad():
+            with torch.inference_mode():
                 mean_loss = torch.mean(losses).item()
                 acc = accuracy(preds, labels)
             bar.set_description(
-                "Loss:{:0.4f} | Accuracy:{:0.2f}%".format(mean_loss, acc)
+                "Loss: {:0.4f} | Accuracy: {:05.2F}% ".format(mean_loss, acc)
             )
 
 training_model.copyWeightsToHost()

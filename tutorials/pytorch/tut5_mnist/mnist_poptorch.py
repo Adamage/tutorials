@@ -21,7 +21,7 @@ pip install -r requirements.txt
 ```
 
 2) Run the program. Note that the PopTorch Python API only supports Python 3.
-Data will be automatically downloaded using torch vision utils.
+Data will be automatically downloaded using torchvision utils.
 
 ```bash
 python3 mnist_poptorch.py
@@ -45,7 +45,7 @@ test_batch_size = 80
 epochs = 10
 
 # Learning rate
-lr = 0.05
+learning_rate = 0.05
 """
 Import required libraries:
 """
@@ -68,31 +68,36 @@ urllib.request.install_opener(opener)
 
 local_dataset_path = 'mnist_data/'
 
-training_data = torch.utils.data.DataLoader(
-    torchvision.datasets.MNIST(
+transform_mnist = torchvision.transforms.Compose(
+    [
+        torchvision.transforms.ToTensor(),
+        torchvision.transforms.Normalize((0.1307, ), (0.3081, ))
+    ]
+)
+
+training_dataset = torchvision.datasets.MNIST(
         local_dataset_path,
         train=True,
         download=True,
-        transform=torchvision.transforms.Compose([
-            torchvision.transforms.ToTensor(),
-            torchvision.transforms.Normalize((0.1307, ), (0.3081, ))]
-        )
-    ),
+        transform=transform_mnist
+)
+
+training_data = torch.utils.data.DataLoader(
+    training_dataset,
     batch_size=batch_size * batches_per_step,
     shuffle=True,
     drop_last=True
 )
 
-test_data = torch.utils.data.DataLoader(
-    torchvision.datasets.MNIST(
+test_dataset = torchvision.datasets.MNIST(
         local_dataset_path,
         train=False,
         download=True,
-        transform=torchvision.transforms.Compose([
-            torchvision.transforms.ToTensor(),
-            torchvision.transforms.Normalize((0.1307, ), (0.3081, ))]
-        )
-    ),
+        transform=transform_mnist
+)
+
+test_data = torch.utils.data.DataLoader(
+    test_dataset,
     batch_size=test_batch_size,
     shuffle=True,
     drop_last=True
@@ -100,7 +105,7 @@ test_data = torch.utils.data.DataLoader(
 # sst_hide_output
 """
 Let's define the elements of our neural network. First, we create the class
-`Block` which while define a simple 2D convolutional layer with pooling and
+`Block` which will consist of a simple 2D convolutional layer with pooling and
 a rectified linear unit (ReLU). To see explanation of pooling and ReLU, see:
 [Convolutional Neural Network](https://en.wikipedia.org/wiki/Convolutional_neural_network#Building_blocks)
 """
@@ -147,6 +152,14 @@ class Network(nn.Module):
 """
 Here we define a thin wrapper around the `torch.nn.Module` that will use
 cross-entropy loss function - see more [here](https://en.wikipedia.org/wiki/Cross_entropy#Cross-entropy_loss_function_and_logistic_regression)
+
+This class is creating a custom module to compose the Neural Network and 
+the Cross Entropy module into one object, which under the hood will invoke 
+the `__call__` function on `nn.Module` and consequently the `forward` method 
+when called like this:
+```python
+prediction, losses = TrainingModelWithLoss(Network())(data, labels)
+```
 """
 class TrainingModelWithLoss(torch.nn.Module):
     def __init__(self, model):
@@ -156,17 +169,19 @@ class TrainingModelWithLoss(torch.nn.Module):
 
     def forward(self, args, loss_inputs=None):
         output = self.model(args)
-        if loss_inputs is None:
-            return output
-        else:
-            loss = self.loss(output, loss_inputs)
-            return output, loss
+        loss = self.loss(output, loss_inputs)
+        return output, loss
 """
 Let's initiate the neural network from our defined classes.
 """
 model = Network()
 model_with_loss = TrainingModelWithLoss(model)
 model_opts = poptorch.Options().deviceIterations(batches_per_step)
+"""
+We can check if the model is assembled correctly by printing the string 
+representation of the model object
+"""
+print(model_with_loss)
 """
 Now we apply the model wrapping function, which will perform a shallow copy
 of the PyTorch model. To perform the machine learning operations, we also
@@ -175,7 +190,7 @@ will use the Stochastic Gradient Descent with no momentum [SGD](https://docs.gra
 training_model = poptorch.trainingModel(
     model_with_loss,
     model_opts,
-    optimizer=optim.SGD(model.parameters(), lr=lr)
+    optimizer=optim.SGD(model.parameters(), lr=learning_rate)
 )
 """
 We are ready to start training. However to track the accuracy while training
@@ -194,16 +209,16 @@ This code will perform the requested amount of epochs and batches using the
 configured Graphcore IPUs.
 """
 nr_batches = len(training_data)
-for epoch in range(1, epochs+1):
-    print("Epoch {0}/{1}".format(epoch, epochs))
+
+for epoch in tqdm(range(1, epochs+1), leave=True, desc="Epochs", total=epochs):
     with tqdm(training_data, total=nr_batches, leave=False) as bar:
         for data, labels in bar:
             preds, losses = training_model(data, labels)
-            with torch.no_grad():
+            with torch.inference_mode():
                 mean_loss = torch.mean(losses).item()
                 acc = accuracy(preds, labels)
             bar.set_description(
-                "Loss:{:0.4f} | Accuracy:{:0.2f}%".format(mean_loss, acc)
+                "Loss: {:0.4f} | Accuracy: {:05.2F}% ".format(mean_loss, acc)
             )
 # sst_hide_output
 """

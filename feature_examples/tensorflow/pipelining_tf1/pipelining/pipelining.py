@@ -172,6 +172,7 @@ We start with importing all necessary libraries
 """
 
 import time
+import math
 import numpy as np
 import tensorflow.compat.v1 as tf
 from tensorflow.keras.datasets import mnist
@@ -804,6 +805,7 @@ def optimizer_function(learning_rate, loss):
     optimizer = tf.train.GradientDescentOptimizer(learning_rate=learning_rate)
     return ipu.pipelining_ops.OptimizerFunctionOutput(optimizer, loss)
 
+
 """
 When the pipeline API is used, we specify repeat count and gradient
 accumulation count so the explicit `loop_repeat_model` wrapper is redundant.  
@@ -856,6 +858,7 @@ the `ipu.pipelining_ops.pipeline` API.
 Complete code for this function is below:
 """
 
+
 def pipelined_model(learning_rate):
     # Defines a pipelined model which is split accross two stages
 
@@ -884,6 +887,7 @@ def pipelined_model(learning_rate):
         outfeed_loss=True,
         name="Pipeline")
     return pipeline_op
+
 
 """
 Explanation of used parameters:
@@ -936,7 +940,7 @@ examples_per_step = args.batch_size * args.repeat_count
 We replace it with:
 """
 
-REPEAT_COUNT = 10 # Before 160, while BATCHES_TO_ACCUMULATE=16
+REPEAT_COUNT = 10  # Before 160, while BATCHES_TO_ACCUMULATE=16
 examples_per_step = BATCH_SIZE * BATCHES_TO_ACCUMULATE * REPEAT_COUNT
 
 """
@@ -952,13 +956,13 @@ infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
 outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
 
 with ipu.scopes.ipu_scope("/device:IPU:0"):
-    compiled_model = ipu.ipu_compiler.compile(pipelined_model, inputs=[learning_rate])
+    compiled_model = ipu.ipu_compiler.compile(pipelined_model,
+                                              inputs=[learning_rate])
 
 outfeed_op = outfeed_queue.dequeue()
 
 ipu.utils.move_variable_initialization_to_cpu()
 init_op = tf.global_variables_initializer()
-
 
 """
 Modify the IPU config. Add a line to the IPU configuration code to specify 
@@ -1092,15 +1096,307 @@ case compared to the original version.
 The code changes for this step can be found
 here: [`answers/step3_pipelining.py`](answers/step3_pipelining.py)
 """
+"""
+### Tutorial Step 4: Run-time Configurable Stages
+
+During the development and tuning of more complex models there are often
+multiple hyperparameters that can be adjusted. Even in this tutorial's simple
+pipelining application, we can adjust the batch size, the gradient accumulation
+count and the stages. It is easier to experiment with these options if they can
+be configured from the command line.
+
+Batch size and gradient accumulation count are already configurable from the
+command line (`--batch-size`, `--batches-to-accumulate`) in scripts or from
+the cell at top of this notebook. But the 'stages' are currently hardcoded by 
+the series of 'stageN' functions defined locally in `pipelined_model`.
+
+In this next step we will add code to support run-time configurable stages.
+There are many ways this could be implemented, but we only demonstrate one
+method here.
+"""
+"""
+#### Tutorial Step 4: Code Changes
+
+Add a new variable `SPLITS` with which you can specify the points
+to 'split' the model.
+
+This should take multiple string arguments where each argument defines the
+split point. This is the layer that will be assigned to the *next* stage. The
+implication is that for N `--split` arguments the model will run on N+1 stages
+and IPUs. Let's assume that will create a model_layers dictionary from which we
+can generate a list of layer ids.
+
+"""
+SPLITS = ['dense32']
+"""
+Now, we add a function `discover_layers` that will return a sorted list of 
+layers.
+
+This can use `globals()` to find all functions that match a specific syntax.
+
+- Find all functions that match `layer<idx>_<id>`. For example, this should
+  find `layer1_flatten` and return an entry with idx==1 and id=="flatten".
+- Make each returned layer in the list a dictionary with keys 'func', 'id'
+  and 'idx'.
+- Layers should be sorted by 'idx' but do not need to be strictly sequential;
+  this is so 'gaps' can be left to support insertion of layers when
+  writing/developing your model.
+
+"""
 
 
+def discover_layers():
+    # This parses global functions with form "layer<n>_<id>"
+    # e.g. "layer3_BlockA"
+    # The layers will be sorted by <n>
+    # A layer list of dictionaries is returned with:
+    #   "func" : Function reference
+    #   "id"   : String name of layer (==<id>)
+    layers = []
+    global_symbols = globals()
+    prefix = "layer"
+    layer_funcs = [key for key in global_symbols if key.startswith(prefix)]
+    for layer_func in layer_funcs:
+        try:
+            idx_id = layer_func[len(prefix):]
+            idx, id = idx_id.split("_")
+            layers.append({"func": global_symbols[layer_func],
+                           "id": id, "idx": int(idx)})
+        except:
+            pass
+
+    def use_idx(e):
+        return e["idx"]
+
+    layers.sort(key=use_idx)
+    return layers
 
 
+"""
+Then, we add a function that will take the layer list and 'splits' argument and
+return a list of stages.
+
+Each stage should be a list of those layers in that stage.
+"""
 
 
+def move_layers_to_stages(layers, splits):
+    # Sequence layers into distinct groups (stages)
+    # according to splits.
+    def next_split_layer():
+        # Returns idx of layer matching id.
+        if stage >= len(splits):
+            return None
+        split = splits[stage]
+        try:
+            return next(layer for layer in layers if (layer["id"] == split))
+        except:
+            print("Failed to match split layer with id \"{}\"".format(split))
+            return None
+
+    stages = [[]]
+    stage = 0
+    idx = 0
+    next_split = next_split_layer()
+    while len(layers):
+        ly = layers.pop(0)
+        if ly == next_split:
+            stage += 1
+            stages.append([])
+            next_split = next_split_layer()
+        stages[stage].append(ly)
+    return stages
 
 
+"""
+Instead of using hard coded stage definitions from `pipelined_model`, we build 
+a list of dynamically generated stages.
+
+Add a local helper to `pipelined_model` that will build a stage from the list
+of associated layers.  
+The arguments can be sequenced through the layers.
+```python
+def make_pipeline_stage(idx, stage):
+    # Helper that defines a single stage consisting of one or more layers
+    def _stage(*args):
+        for layer in stage:
+            with tf.variable_scope("stage" + str(idx) + "_" + layer["id"],
+                                   use_resource=True):
+                print("Issuing stage {} layer {}".format(idx, layer["id"]))
+                args = layer["func"](*args)
+        return args
+
+    return _stage
+```
+
+Build a list of computational_stages that can be passed to the pipelining API.
+Make each stage (function) and add it to the computational stages
+
+```python
+computational_stages = []
+for idx, stage in enumerate(stages):
+    f = make_pipeline_stage(idx, stage)
+    computational_stages.append(f)
+```
+
+Update the pipelining APIs `computational_stages` to use the dynamically
+generated list.
+
+```python
+computational_stages = computational_stages
+
+```
+
+Complete, updated 'pipelined_model' looks like that:
+"""
 
 
+def pipelined_model(learning_rate):
+    # Helper that defines a single stage consisting of one or more layers
+    def make_pipeline_stage(idx, stage):
+        def _stage(*args):
+            for layer in stage:
+                with tf.variable_scope("stage" + str(idx) + "_" + layer["id"],
+                                       use_resource=True):
+                    print("Issuing stage {} layer {}".format(idx, layer["id"]))
+                    args = layer["func"](*args)
+            return args
+
+        return _stage
+
+    # Make each stage (function) and add it to the computational stages
+    computational_stages = []
+    for idx, stage in enumerate(stages):
+        f = make_pipeline_stage(idx, stage)
+        computational_stages.append(f)
+
+    pipeline_op = ipu.pipelining_ops.pipeline(
+        computational_stages=computational_stages,
+        gradient_accumulation_count=BATCHES_TO_ACCUMULATE,
+        repeat_count=REPEAT_COUNT,
+        inputs=[learning_rate],
+        infeed_queue=infeed_queue,
+        outfeed_queue=outfeed_queue,
+        optimizer_function=optimizer_function,
+        pipeline_schedule=ipu.pipelining_ops.PipelineSchedule.Grouped,
+        outfeed_loss=True,
+        name="Pipeline")
+    return pipeline_op
 
 
+"""
+Update the script to use the new features. 
+Add a line to call `discover_layers` and `move_layers_to_stages`;
+return as `stages`.  
+The following example also includes some additional logging and error
+reporting.
+"""
+
+model_layers = discover_layers()
+"""
+Show final list of layers
+"""
+print("Layers:")
+layer_list = [layer["id"] for layer in model_layers]
+print(" " + (", ".join(layer_list)))
+
+"""
+Sequence layers into stage-groups
+"""
+stages = move_layers_to_stages(model_layers, SPLITS)
+if (len(stages) != len(SPLITS) + 1):
+    print("Unexpected stage count - check splits are valid")
+"""
+Note, stage count has to be power of 2.
+"""
+#
+num_stages = len(stages)
+num_ipus = int(math.pow(2, math.ceil(math.log(num_stages, 2))))
+if num_stages != num_ipus:
+    print(
+        "Stage count must be power2 (specified {} versus next power2 {})".format(
+            num_stages, num_ipus))
+"""
+Show final list of staged layers
+"""
+print("Stages:")
+for idx, stage in enumerate(stages):
+    layer_list = [layer["id"] for layer in stage]
+    print(" " + str(idx) + ". " + ("-".join(layer_list)))
+    if len(layer_list) == 0:
+        print("Unexpected empty stage - check splits are valid")
+"""
+Compile new model
+"""
+infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
+outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
+
+with ipu.scopes.ipu_scope("/device:IPU:0"):
+    compiled_model = ipu.ipu_compiler.compile(pipelined_model,
+                                              inputs=[learning_rate])
+
+outfeed_op = outfeed_queue.dequeue()
+
+ipu.utils.move_variable_initialization_to_cpu()
+init_op = tf.global_variables_initializer()
+
+"""
+Update the IPU count to match the number of stages.
+"""
+ipu_configuration = ipu.config.IPUConfig()
+ipu_configuration.auto_select_ipus = len(SPLITS) + 1
+ipu_configuration.selection_order = ipu.utils.SelectionOrder.SNAKE
+ipu_configuration.configure_ipu_system()
+"""
+
+Now, run the modified application. You can also do that by running python script
+with command:
+
+```
+$ python3 step4_configurable_stages.py
+```
+"""
+
+train()
+print("Stage 4 ran successfully")
+# sst_hide_output
+
+"""
+You should see it train with output something like this below.
+
+```
+$ python3 step4_configurable_stages.py
+<CUT>
+Layers:
+ flatten, dense256, dense128, dense64, dense32, logits, cel
+Stages:
+ 0. flatten-dense256-dense128-dense64
+ 1. dense32-logits-cel
+Steps 586 x examples per step 5120 (== 3000320 training examples, 50.00 epochs of 60000 examples)
+Issuing stage 0 layer flatten
+Issuing stage 0 layer dense256
+Issuing stage 0 layer dense128
+Issuing stage 0 layer dense64
+Issuing stage 1 layer dense32
+Issuing stage 1 layer logits
+Issuing stage 1 layer cel
+<CUT>
+Step 0, Epoch 0.0, Mean loss: 2.165
+Step 10, Epoch 0.9, Mean loss: 0.379
+<CUT>
+Step 585, Epoch 49.9, Mean loss: 0.001
+Elapsed <CUT>
+```
+
+Try specifying a different split point. For example, using the following shell
+command:
+
+`python3 step4_configurable_stages.py --splits dense128`
+
+Try specifying multiple splits. For example. using the following shell command:
+
+`python3 step4_configurable_stages.py --splits dense128 dense64 dense32`
+
+The code changes for this step can be found
+here: [`answers/step4_configurable_stages.py`](answers/step4_configurable_stages.py)
+"""

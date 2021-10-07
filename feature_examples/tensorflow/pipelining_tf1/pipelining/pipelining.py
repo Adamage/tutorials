@@ -181,7 +181,7 @@ from tensorflow.python import ipu
 
 tf.disable_eager_execution()
 tf.disable_v2_behavior()
-
+### sst_hide_output
 """
 If you see output something like this below then it means that you forgot to 
 install the Graphcore TensorFlow 1 wheel. See [the Requirements section](#requirements).
@@ -238,7 +238,7 @@ def create_dataset(batch_size):
 
 num_examples, dataset = create_dataset(batch_size=BATCH_SIZE)
 num_train_examples = int(EPOCHS * num_examples)
-
+# sst_hide_output
 """
 Create the data queues from/to IPU
 """
@@ -260,7 +260,7 @@ In order to evaluate at least N total examples, do ceil(N / n) steps
 steps = (num_train_examples + examples_per_step - 1) // examples_per_step
 training_samples = steps * examples_per_step
 print(f'Steps {steps} x examples per step {examples_per_step} '
-      f'(== {training_samples} training examples, {training_samples / num_examples} '
+      f'(== {training_samples} training examples, {training_samples / num_examples:.2f} '
       f'epochs of {num_examples} examples)')
 """
 Now we will compile the learning rate and create the model 
@@ -316,6 +316,7 @@ with ipu.scopes.ipu_scope("/device:IPU:0"):
     compiled_model = ipu.ipu_compiler.compile(loop_repeat_model,
                                               inputs=[learning_rate])
 outfeed_op = outfeed_queue.dequeue()
+# sst_hide_output
 """"
 Configure the IPU.
 """
@@ -326,6 +327,7 @@ init_op = tf.global_variables_initializer()
 ipu_configuration = ipu.config.IPUConfig()
 ipu_configuration.auto_select_ipus = 1
 ipu_configuration.configure_ipu_system()
+# sst_hide_output
 
 """
 We are ready to start the training process!
@@ -444,9 +446,9 @@ This model outline shows how the operations will be allocated to shards:
 #### Tutorial Step 2: Code Changes
 Now we will modify the model code so it will be divided between two shards.
 In the beginning we add two sharding scopes:
-- `ipu.scopes.ipu_shard(0) - this will be the context for the set of layers 
+- `ipu.scopes.ipu_shard(0)` - this will be the context for the set of layers 
 that will end up running on IPU0
-- `ipu.scopes.ipu_shard(1) - this will be the context for the set of layers 
+- `ipu.scopes.ipu_shard(1)` - this will be the context for the set of layers 
 that will end up running on IPU1
 
 Then, we split the model across the two scopes, so that IPU0 runs layers 
@@ -501,6 +503,7 @@ We also have to increase the IPU count from 1 to 2.
 ipu_configuration = ipu.config.IPUConfig()
 ipu_configuration.auto_select_ipus = 2
 ipu_configuration.configure_ipu_system()
+# sst_hide_output
 """
 We are ready to compile model again and start the training process:
 """
@@ -945,7 +948,7 @@ examples_per_step = BATCH_SIZE * BATCHES_TO_ACCUMULATE * REPEAT_COUNT
 
 """
 Note that with batch size BS, gradient accumulation count GAC and repeat count RPT,
-# at every step n = (BS * GAC * RPT) examples are used. We also changed the 
+at every step n = (BS * GAC * RPT) examples are used. We also changed the 
 default repeat count to 10 (from 160). The pipelined version will still process 
 160 batches each step (`GAC` 16 * `RPT` 10 == 160).
 
@@ -973,6 +976,7 @@ ipu_configuration = ipu.config.IPUConfig()
 ipu_configuration.auto_select_ipus = 2
 ipu_configuration.selection_order = ipu.utils.SelectionOrder.SNAKE
 ipu_configuration.configure_ipu_system()
+# sst_hide_output
 
 """
 
@@ -1072,7 +1076,7 @@ running on the IPU and minimise interactions with the host.
 We encourage you to test the training script more deeply using different 
 parameters. You can do this by modifying the parameters in the notebook and 
 running the appropriate cell, but an error-free approach would be to use the 
-full script for training step 3 located in: `answers/step3_pipelining.py`
+full script for training step 3 located in: [`answers/step3_pipelining.py`](answers/step3_pipelining.py)
 
 ##### Pipeline Schedule
 
@@ -1309,7 +1313,7 @@ if (len(stages) != len(SPLITS) + 1):
 """
 Note, stage count has to be power of 2.
 """
-#
+
 num_stages = len(stages)
 num_ipus = int(math.pow(2, math.ceil(math.log(num_stages, 2))))
 if num_stages != num_ipus:
@@ -1347,6 +1351,8 @@ ipu_configuration = ipu.config.IPUConfig()
 ipu_configuration.auto_select_ipus = len(SPLITS) + 1
 ipu_configuration.selection_order = ipu.utils.SelectionOrder.SNAKE
 ipu_configuration.configure_ipu_system()
+# sst_hide_output
+
 """
 
 Now, run the modified application. You can also do that by running python script
@@ -1469,8 +1475,8 @@ It is possible to combine data parallelism with model parallelism by using the
 standard `CrossReplicaOptimizer`, which is used for training replicated models,
 in the pipeline optimiser function. In this case:
 
-`effective batch size` = `replication factor` * `mini-batch size`
-* `gradient accumulation count`
+`effective batch size` = `replication factor` * `mini-batch size` * `gradient 
+accumulation count`
 
 """
 """
@@ -1488,12 +1494,12 @@ The following example is derived from `step3_pipelining.py` and further
 simplified:
 
 ```python
-    ipu_estimator = ipu.ipu_pipeline_estimator.IPUPipelineEstimator(
-    config=config,
-    model_fn=model_fn,
-    params={
-        "learning_rate": args.learning_rate,
-        "gradient_accumulation_count": args.batches_to_accumulate
+ipu_estimator = ipu.ipu_pipeline_estimator.IPUPipelineEstimator(
+config=config,
+model_fn=model_fn,
+params={
+    "learning_rate": args.learning_rate,
+    "gradient_accumulation_count": args.batches_to_accumulate
     },
 )
 

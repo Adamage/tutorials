@@ -178,6 +178,9 @@ from tensorflow.keras.datasets import mnist
 from tensorflow.keras import layers
 from tensorflow.python import ipu
 
+tf.disable_eager_execution()
+tf.disable_v2_behavior()
+
 """
 If you see output something like this below then it means that you forgot to 
 install the Graphcore TensorFlow 1 wheel. See [the Requirements section](#requirements).
@@ -189,11 +192,6 @@ Traceback (most recent call last):
 ModuleNotFoundError: No module named 'tensorflow'
 ```
 """
-"""
-TODO
-"""
-tf.disable_eager_execution()
-tf.disable_v2_behavior()
 """
 Set hyperparameters, if you want to run the script with different ones remember
 to rerun all cells below
@@ -304,7 +302,7 @@ def model(learning_rate, images, labels):
 
 """
 Create functions that runs the training step `REPEAT_COUNT` times by iterating 
-the model in an IPU repeat loop.
+the model in an IPU repeat loop, then compile the model.
 """
 
 
@@ -313,51 +311,51 @@ def loop_repeat_model(learning_rate):
     return r
 
 
-"""
-TODO
-"""
 with ipu.scopes.ipu_scope("/device:IPU:0"):
     compiled_model = ipu.ipu_compiler.compile(loop_repeat_model,
                                               inputs=[learning_rate])
-
 outfeed_op = outfeed_queue.dequeue()
-"""
-TODO
-"""
-ipu.utils.move_variable_initialization_to_cpu()
-init_op = tf.global_variables_initializer()
-
 """"
 Configure the IPU.
 """
+
+ipu.utils.move_variable_initialization_to_cpu()
+init_op = tf.global_variables_initializer()
+
 ipu_configuration = ipu.config.IPUConfig()
 ipu_configuration.auto_select_ipus = 1
 ipu_configuration.configure_ipu_system()
 
 """
-TODO
+We are ready to start the training process!
 """
-with tf.Session() as sess:
-    # Initialize
-    sess.run(init_op)
-    sess.run(infeed_queue.initializer)
-    # Run
-    begin = time.time()
-    for step in range(steps):
-        sess.run(compiled_model, {learning_rate: LEARNING_RATE})
-        # Read the outfeed for the training losses
-        losses = sess.run(outfeed_op)
-        if losses is not None and len(losses):
-            epoch = float(examples_per_step * step / num_examples)
-            if step == (steps - 1) or (step % 10) == 0:
-                print("Step {}, Epoch {:.1f}, Mean loss: {:.3f}".format(
-                    step, epoch, np.mean(losses)))
-    end = time.time()
-    elapsed = end - begin
-    samples_per_second = training_samples / elapsed
-    print("Elapsed {:.2f}, {:.2f} samples/sec".format(elapsed, samples_per_second))
 
-print("Program ran successfully")
+
+def train():
+    with tf.Session() as sess:
+        # Initialize
+        sess.run(init_op)
+        sess.run(infeed_queue.initializer)
+        # Run
+        begin = time.time()
+        for step in range(steps):
+            sess.run(compiled_model, {learning_rate: LEARNING_RATE})
+            # Read the outfeed for the training losses
+            losses = sess.run(outfeed_op)
+            if losses is not None and len(losses):
+                epoch = float(examples_per_step * step / num_examples)
+                if step == (steps - 1) or (step % 10) == 0:
+                    print("Step {}, Epoch {:.1f}, Mean loss: {:.3f}".format(
+                        step, epoch, np.mean(losses)))
+        end = time.time()
+        elapsed = end - begin
+        samples_per_second = training_samples / elapsed
+        print("Elapsed {:.2f}, {:.2f} samples/sec".format(elapsed,
+                                                          samples_per_second))
+
+
+train()
+print("Stage 1 ran successfully")
 # sst_hide_output
 """
 You can also run it with `$ python3 step1_single_ipu.py`  
@@ -404,7 +402,6 @@ a `GradientDescentOptimizer`.
 See the TensorFlow 1 API documentation for details: [GradientAccumulationOptimizerV2](<https://docs.graphcore.ai/projects/tensorflow-user-guide/en/latest/api.html#tensorflow.python.ipu.optimizers.GradientAccumulationOptimizerV2>)
 """
 """
-
 Generate a profile report into directory `./profile_step1_single_ipu` with:
 
 `$ scripts/profile.sh step1_single_ipu.py`
@@ -424,11 +421,152 @@ The key points to note are:
 * IPU0 runs all layers from 'flatten' to 'softmax_ce' and the optimizer.  
 * Because `GradientAccumulationOptimizerV2` is being used, the gradient descent 
 is deferred until `args.batches_to_accumulate` mini-batches have been processed.
-* The application uses `with tf.variable_scope(...)` to declare a context manager 
+* The application uses `with tf.variable_scope(...)` to declare a context manager
 for each layer; variables and ops inherit the scope name, which provides useful 
 context in the Graph Analyser.
 
 Scroll to the far right in Graph Analyser to see the gradient descent step:
 
 ![Execution trace - Gradient Descent](images/step1_single_ipu_execution_trace_gradient_descent.png)
+"""
+"""
+# Tutorial Step 2: Running The Model On Multiple IPUs Using Sharding
+
+Let's look at how we can shard a model to run it on multiple IPUs **without**
+pipelining.
+
+This model outline shows how the operations will be allocated to shards:
+
+![Model Schematic (sharded)](images/model_schematic_sharded.png)
+"""
+"""
+### Tutorial Step 2: Code Changes
+Now we will modify the model code so it will be divided between two shards.
+In the beginning we add two sharding scopes:
+- `ipu.scopes.ipu_shard(0) - this will be the context for the set of layers 
+that will end up running on IPU0
+- `ipu.scopes.ipu_shard(1) - this will be the context for the set of layers 
+that will end up running on IPU1
+
+Then, we split the model across the two scopes, so that IPU0 runs layers 
+'flatten' to 'dense64' and IPU1 runs layers ' dense32' to 'softmax_ce' plus 
+the optimizer.
+
+After this change is applied, the model definition function should look like
+this:
+"""
+
+
+def model(learning_rate, images, labels):
+    # Receiving images,labels (x args.batch_size) via infeed.
+    # The scoping here helps clarify the execution trace when using --profile.
+
+    with ipu.scopes.ipu_shard(0):
+        with tf.variable_scope("flatten"):
+            activations = layers.Flatten()(images)
+        with tf.variable_scope("dense256"):
+            activations = layers.Dense(256, activation=tf.nn.relu)(activations)
+        with tf.variable_scope("dense128"):
+            activations = layers.Dense(128, activation=tf.nn.relu)(activations)
+        with tf.variable_scope("dense64"):
+            activations = layers.Dense(64, activation=tf.nn.relu)(activations)
+    with ipu.scopes.ipu_shard(1):
+        with tf.variable_scope("dense32"):
+            activations = layers.Dense(32, activation=tf.nn.relu)(activations)
+        with tf.variable_scope("logits"):
+            logits = layers.Dense(10)(activations)
+        with tf.variable_scope("softmax_ce"):
+            cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
+                labels=labels, logits=logits)
+        with tf.variable_scope("mean"):
+            loss = tf.reduce_mean(cross_entropy)
+        with tf.variable_scope("optimizer"):
+            optimizer = tf.train.GradientDescentOptimizer(
+                learning_rate=learning_rate)
+            if BATCHES_TO_ACCUMULATE > 1:
+                optimizer = ipu.optimizers.GradientAccumulationOptimizerV2(
+                    optimizer,
+                    num_mini_batches=BATCHES_TO_ACCUMULATE)
+            train_op = optimizer.minimize(loss=loss)
+        # A control dependency is used here to ensure that
+        # the train_op is not removed.
+        with tf.control_dependencies([train_op]):
+            return learning_rate, outfeed_queue.enqueue(loss)
+
+
+"""
+We also have to increase the IPU count from 1 to 2.
+"""
+ipu_configuration = ipu.config.IPUConfig()
+ipu_configuration.auto_select_ipus = 2
+ipu_configuration.configure_ipu_system()
+"""
+We are ready to compile model again and start the training process:
+"""
+
+infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
+outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
+
+with ipu.scopes.ipu_scope("/device:IPU:0"):
+    compiled_model = ipu.ipu_compiler.compile(loop_repeat_model,
+                                              inputs=[learning_rate])
+
+outfeed_op = outfeed_queue.dequeue()
+
+ipu.utils.move_variable_initialization_to_cpu()
+init_op = tf.global_variables_initializer()
+
+train()
+print("Stage 2 ran successfully")
+# sst_hide_output
+"""
+You should see it train with output something like this below.
+
+```
+$ python3 step2_sharding.py
+<CUT>
+Steps 586 x examples per step 5120 (== 3000320 training examples, 50.00 epochs of 60000 examples)
+<CUT>
+Step 0, Epoch 0.0, Mean loss: 2.184
+Step 10, Epoch 0.9, Mean loss: 0.362
+<CUT>
+Step 585, Epoch 49.9, Mean loss: 0.001
+Elapsed <CUT>
+```
+
+Complete working example also can be found in `answers/step2_sharding.py`,
+you can run the application with the following shell command:
+
+`$ python3 step2_sharding.py`
+"""
+"""
+Generate a profile report into directory `./profile_step2_sharding` with:
+
+`$ scripts/profile.sh step2_sharding.py`
+
+Use PopVision Graph Analyser to view the execution trace.
+
+You should see something like this (zoomed in to show a single mini-batch):
+
+![Execution trace](images/step2_sharding_execution_trace.png)
+
+The key points to note are:
+
+* IPU0 runs layers 'flatten' to 'dense64'.
+* IPU1 runs layers 'dense32' to 'softmax_ce' and the optimizer.
+* It is not efficient because execution is serialised (there is poor
+  utilisation).
+* Because `GradientAccumulationOptimizerV2` is being used, the gradient descent
+  is deferred until `args.batches_to_accumulate` mini-batches have been
+  processed.
+* In this specific captured example, the gradients are calculated entirely on
+  IPU1.
+
+Also, note that for a small model such as this one, that fits on a single IPU,
+sharding does not bring any performance advantages. In fact, because data
+exchange between IPUs is slower than data exchange within an IPU, the
+performance will be worse than that without sharding.
+
+The completed code for this step can be found
+here: [`answers/step2_sharding.py`](answers/step2_sharding.py)
 """

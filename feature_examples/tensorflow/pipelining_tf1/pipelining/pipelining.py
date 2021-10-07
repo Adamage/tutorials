@@ -1400,3 +1400,148 @@ Try specifying multiple splits. For example. using the following shell command:
 The code changes for this step can be found
 here: [`answers/step4_configurable_stages.py`](answers/step4_configurable_stages.py)
 """
+"""
+## Further Considerations
+
+This section calls out some additional features and parameters that can affect
+performance when pipelining.
+
+Always refer to the technical note on TensorFlow pipelining for the most
+up-to-date and detailed
+information: [TensorFlow Model Parallelism - Pipelining](<https://docs.graphcore.ai/projects/tf-model-parallelism/en/latest/pipelining.html#pipelining>)
+
+"""
+"""
+### Recomputation
+
+When pipelining, the forward activations of each operation will be saved so
+that they are available to compute the gradients in the backwards pass. This
+may require significant memory. If IPU memory is limited, then _recomputation_
+can be used to reduce the memory used to store activations. With recomputation
+enabled, activations are only saved for a selected subset of the forward
+operations. The activations which were not saved will be recomputed as part of
+the backwards pass. This saves IPU memory at the expense of requiring more
+compute. Pipelining can be used with a single IPU in order to use
+recomputation, where using recomputation allows a model and mini-batch size to
+fit that would otherwise be out-of-memory on the IPU.
+
+Refer to the technical note on TensorFlow Model Parallelism for full
+details: [TensorFlow Model Parallelism - Pipelining Recomputation](<https://docs.graphcore.ai/projects/tf-model-parallelism/en/latest/pipelining.html#recomputation>)
+
+"""
+"""
+### Variable Offloading
+
+If IPU memory is limited, then variable offloading can be used. This will store
+some variables and activations in Streaming Memory. This saves IPU memory at
+the expense of time to swap the data on and off the IPU.
+
+Refer to the technical note on TensorFlow Model Parallelism for full
+details: [TensorFlow Model Parallelism - Pipelining Variable Offloading](<https://docs.graphcore.ai/projects/tf-model-parallelism/en/latest/pipelining.html#variable-offloading>)
+
+"""
+"""
+### Gradient Accumulation Buffer Data Type
+
+Gradients will be accumulated in a buffer when pipelining. The datatype of this
+buffer can be controlled using the API's `gradient_accumulation_dtype`
+argument:
+
+- `None`: Use an accumulator buffer of the same TensorFlow `DType` as each
+  variable.
+- A TensorFlow `DType`: Specify the type to use for all accumulation buffers (
+  for example, `tf.float16` or `tf.float32`).
+- A Python `callable`: User provided callback to support a different `DType`
+  for each variable.
+
+The default is `None` (use an accumulator buffer of the same `DType` as each
+variable). You may want to override this if you are training in float16 and you
+want to use a float32 accumulator buffer.
+
+See the TensorFlow 1 API documentation for
+details: [TensorFlow1 Pipelining API](<https://docs.graphcore.ai/projects/tensorflow1-user-guide/en/latest/api.html#tensorflow.python.ipu.pipelining_ops.pipeline>)
+
+"""
+"""
+### Data Parallelism
+
+It is possible to combine data parallelism with model parallelism by using the
+standard `CrossReplicaOptimizer`, which is used for training replicated models,
+in the pipeline optimiser function. In this case:
+
+`effective batch size` = `replication factor` * `mini-batch size`
+* `gradient accumulation count`
+
+"""
+"""
+### IPUPipelineEstimator
+
+`IPUPipelineEstimator` is a version of `IPUEstimator` that supports pipelining.
+These APIs handle many of the details of running on IPUs, such as placement of
+operations and tensors, graph compilation and usage of data feeds. The model
+function provided to the `IPUEstimator` API must return an instance
+of `IPUPipelineEstimatorSpec` that contains the information needed for
+execution including pipelining specific details such as the computational
+stages and the gradient accumulation count.
+
+The following example is derived from `step3_pipelining.py` and further
+simplified:
+
+```python
+    ipu_estimator = ipu.ipu_pipeline_estimator.IPUPipelineEstimator(
+    config=config,
+    model_fn=model_fn,
+    params={
+        "learning_rate": args.learning_rate,
+        "gradient_accumulation_count": args.batches_to_accumulate
+    },
+)
+
+ipu_estimator.train(input_fn=input_fn, steps=steps)
+```
+
+Where `input_fn` provides the dataset and `model_fn` provides the model
+definition. The `model_fn` might look like this:
+```python
+def model_fn(mode, params):
+    if not mode == tf.estimator.ModeKeys.TRAIN:
+        raise NotImplementedError(mode)
+
+    # Defines a pipelined model which is split accross two stages
+    def stage1(images, labels):
+        r = layer1_flatten(images, labels)
+        r = layer2_dense256(*r)
+        r = layer3_dense128(*r)
+        r = layer4_dense64(*r)
+        return r
+
+    def stage2(*r):
+        r = layer5_dense32(*r)
+        r = layer6_logits(*r)
+        loss = layer7_cel(*r)
+        return loss
+
+    def optimizer_function(loss):
+        # Optimizer function used by the pipeline to automatically set up
+        # the gradient accumulation and weight update steps
+        optimizer = tf.train.GradientDescentOptimizer(
+            learning_rate=params["learning_rate"])
+        return ipu.pipelining_ops.OptimizerFunctionOutput(optimizer, loss)
+
+    return ipu.ipu_pipeline_estimator.IPUPipelineEstimatorSpec(
+        mode,
+        computational_stages=[stage1, stage2],
+        optimizer_function=optimizer_function,
+        gradient_accumulation_count=params["gradient_accumulation_count"])
+```
+
+A complete example is provided
+here : [`answers/ipu_pipeline_estimator.py`](answers/ipu_pipeline_estimator.py)
+
+Run it with `$ python3 answers/ipu_pipeline_estimator.py`
+
+See the TensorFlow 1 API documentation for details:  
+[TensorFlow IPUPipelineEstimator API](<https://docs.graphcore.ai/projects/tensorflow-user-guide/en/latest/api.html#ipupipelineestimator>)  
+[TensorFlow IPUPipelineEstimatorSpec](<https://docs.graphcore.ai/projects/tensorflow-user-guide/en/latest/api.html#tensorflow.python.ipu.ipu_pipeline_estimator.IPUPipelineEstimatorSpec>)  
+[TensorFlow IPUPipelineEstimator Example](<https://docs.graphcore.ai/projects/tensorflow-user-guide/en/latest/ipu_pipeline_estimator_example.html>)  
+"""

@@ -272,7 +272,7 @@ with tf.device('cpu'):
 
 
 def model(learning_rate, images, labels):
-    # Receiving images,labels (x args.batch_size) via infeed.
+    # Receiving images,labels (x BATCH_SIZE) via infeed.
     # The scoping here helps clarify the execution trace when using --profile.
     with tf.variable_scope("flatten"):
         activations = layers.Flatten()(images)
@@ -387,9 +387,9 @@ The loss is optimized using `GradientDescentOptimizer` and `GradientAccumulation
 
 ```python
 optimizer = tf.train.GradientDescentOptimizer(learning_rate=learning_rate)
-if args.batches_to_accumulate > 1:
+if BATCHES_TO_ACCUMULATE > 1:
     optimizer = ipu.optimizers.GradientAccumulationOptimizerV2(
-            optimizer, num_mini_batches=args.batches_to_accumulate)
+            optimizer, num_mini_batches=BATCHES_TO_ACCUMULATE)
 train_op = optimizer.minimize(loss=loss)
 ```
 
@@ -423,7 +423,7 @@ The key points to note are:
 
 * IPU0 runs all layers from 'flatten' to 'softmax_ce' and the optimizer.  
 * Because `GradientAccumulationOptimizerV2` is being used, the gradient descent 
-is deferred until `args.batches_to_accumulate` mini-batches have been processed.
+is deferred until `BATCHES_TO_ACCUMULATE` mini-batches have been processed.
 * The application uses `with tf.variable_scope(...)` to declare a context manager
 for each layer; variables and ops inherit the scope name, which provides useful 
 context in the Graph Analyser.
@@ -461,7 +461,7 @@ this:
 
 
 def model(learning_rate, images, labels):
-    # Receiving images,labels (x args.batch_size) via infeed.
+    # Receiving images,labels (x BATCH_SIZE) via infeed.
     # The scoping here helps clarify the execution trace when using --profile.
 
     with ipu.scopes.ipu_shard(0):
@@ -561,7 +561,7 @@ The key points to note are:
 * It is not efficient because execution is serialised (there is poor
   utilisation).
 * Because `GradientAccumulationOptimizerV2` is being used, the gradient descent
-  is deferred until `args.batches_to_accumulate` mini-batches have been
+  is deferred until `BATCHES_TO_ACCUMULATE` mini-batches have been
   processed.
 * In this specific captured example, the gradients are calculated entirely on
   IPU1.
@@ -898,8 +898,8 @@ Explanation of used parameters:
 `computational_stages` - specify the previously defined 'stage1' and '
 stage2'.  
 `gradient_accumulation_count` - specify the existing
-args.batches_to_accumulate.  
-`repeat_count` - specify the existing args.repeat_count.  
+BATCHES_TO_ACCUMULATE.  
+`repeat_count` - specify the existing REPEAT_COUNT.  
 `inputs` - specify input arguments that are additional to those provided by the
 infeed queue; this is 'learning_rate'.  
 `infeed_queue` - specify the existing infeed_queue.  
@@ -932,12 +932,12 @@ Where `examples_per_step` was previously calculated as:
 # With batch size BS and repeat count RPT,
 # at every step n = (BS * RPT) examples are used.
 # Ensure we process a whole multiple of the batch accumulation count.
-remainder = args.repeat_count % args.batches_to_accumulate
+remainder = REPEAT_COUNT % BATCHES_TO_ACCUMULATE
 if remainder > 0:
-    args.repeat_count += args.batches_to_accumulate - remainder
+    REPEAT_COUNT += BATCHES_TO_ACCUMULATE - remainder
     print(f'Rounding up repeat count to whole multiple of '
-          f'batches-to-accumulate (== {args.repeat_count})')
-examples_per_step = args.batch_size * args.repeat_count
+          f'batches-to-accumulate (== {REPEAT_COUNT})')
+examples_per_step = BATCH_SIZE * REPEAT_COUNT
 ```
 
 We replace it with:
@@ -1498,8 +1498,8 @@ ipu_estimator = ipu.ipu_pipeline_estimator.IPUPipelineEstimator(
 config=config,
 model_fn=model_fn,
 params={
-    "learning_rate": args.learning_rate,
-    "gradient_accumulation_count": args.batches_to_accumulate
+    "learning_rate": LEARNING_RATE,
+    "gradient_accumulation_count": BATCHES_TO_ACCUMULATE
     },
 )
 

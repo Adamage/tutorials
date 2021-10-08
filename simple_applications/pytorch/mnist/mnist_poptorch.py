@@ -1,12 +1,64 @@
 #!/usr/bin/env python3
 # Copyright (c) 2020 Graphcore Ltd. All rights reserved.
-import argparse
-from tqdm import tqdm
+"""
+# PyTorch(PopTorch) MNIST Training Demo
+
+This example demonstrates how to train a network on the MNIST dataset using
+PopTorch.
+"""
+"""
+## How to use this demo
+
+1) Prepare the environment.
+
+Install the Poplar SDK following the instructions in the Getting Started guide 
+for your IPU system. Make sure to run the `enable.sh` scripts for Poplar and 
+PopART and activate a Python virtualenv with PopTorch installed.
+
+Then install the package requirements:
+```bash
+pip install -r requirements.txt
+```
+
+2) Run the program. Note that the PopTorch Python API only supports Python 3.
+Data will be automatically downloaded using torchvision utils.
+
+```bash
+python3 mnist_poptorch.py
+```
+"""
+"""
+Select your hyperparameters in this cell. If you wish to modify them, re-run
+all cells below it. Further reading [Hyperparameters](https://en.wikipedia.org/wiki/Hyperparameter_(machine_learning))
+Setup parameters for training:
+"""
+# Batch size for training
+batch_size = 8
+
+# Device iteration - batches per step
+batches_per_step = 50
+
+# Batch size for testing
+test_batch_size = 80
+
+# Number of epochs to train
+epochs = 10
+
+# Learning rate
+learning_rate = 0.05
+"""
+Import required libraries:
+"""
+from tqdm.auto import tqdm
 import torch
 import torch.nn as nn
 import torchvision
 import poptorch
 import torch.optim as optim
+"""
+Download the datasets for MNIST - database for handwritten digits.
+Source: [The MNIST Database](http://yann.lecun.com/exdb/mnist/)
+"""
 
 # The following is a workaround for pytorch issue #1938
 from six.moves import urllib
@@ -14,24 +66,49 @@ opener = urllib.request.build_opener()
 opener.addheaders = [("User-agent", "Mozilla/5.0")]
 urllib.request.install_opener(opener)
 
+local_dataset_path = 'mnist_data/'
 
-def get_mnist_data(opts):
-    training_data = torch.utils.data.DataLoader(
-                    torchvision.datasets.MNIST('mnist_data/', train=True, download=True,
-                                               transform=torchvision.transforms.Compose([
-                                                torchvision.transforms.ToTensor(),
-                                                torchvision.transforms.Normalize((0.1307, ), (0.3081, ))])),
-                    batch_size=opts.batch_size * opts.batches_per_step, shuffle=True, drop_last=True)
+transform_mnist = torchvision.transforms.Compose(
+    [
+        torchvision.transforms.ToTensor(),
+        torchvision.transforms.Normalize((0.1307, ), (0.3081, ))
+    ]
+)
 
-    validation_data = torch.utils.data.DataLoader(
-                      torchvision.datasets.MNIST('mnist_data/', train=False, download=True,
-                                                 transform=torchvision.transforms.Compose([
-                                                    torchvision.transforms.ToTensor(),
-                                                    torchvision.transforms.Normalize((0.1307, ), (0.3081, ))])),
-                      batch_size=opts.test_batch_size, shuffle=True, drop_last=True)
-    return training_data, validation_data
+training_dataset = torchvision.datasets.MNIST(
+        local_dataset_path,
+        train=True,
+        download=True,
+        transform=transform_mnist
+)
 
+training_data = torch.utils.data.DataLoader(
+    training_dataset,
+    batch_size=batch_size * batches_per_step,
+    shuffle=True,
+    drop_last=True
+)
 
+test_dataset = torchvision.datasets.MNIST(
+        local_dataset_path,
+        train=False,
+        download=True,
+        transform=transform_mnist
+)
+
+test_data = torch.utils.data.DataLoader(
+    test_dataset,
+    batch_size=test_batch_size,
+    shuffle=True,
+    drop_last=True
+)
+# sst_hide_output
+"""
+Let's define the elements of our neural network. First, we create the class
+`Block` which will consist of a simple 2D convolutional layer with pooling and
+a rectified linear unit (ReLU). To see explanation of pooling and ReLU, see:
+[Convolutional Neural Network](https://en.wikipedia.org/wiki/Convolutional_neural_network#Building_blocks)
+"""
 class Block(nn.Module):
     def __init__(self, in_channels, num_filters, kernel_size, pool_size):
         super(Block, self).__init__()
@@ -47,7 +124,10 @@ class Block(nn.Module):
         x = self.relu(x)
         return x
 
-
+"""
+Now let's construct the deep neural network with 4 Convolutional layers and
+a [softmax layer](https://en.wikipedia.org/wiki/Softmax_function) at the output.
+"""
 class Network(nn.Module):
     def __init__(self):
         super(Network, self).__init__()
@@ -69,7 +149,18 @@ class Network(nn.Module):
         x = self.softmax(x)
         return x
 
+"""
+Here we define a thin wrapper around the `torch.nn.Module` that will use
+cross-entropy loss function - see more [here](https://en.wikipedia.org/wiki/Cross_entropy#Cross-entropy_loss_function_and_logistic_regression)
 
+This class is creating a custom module to compose the Neural Network and 
+the Cross Entropy module into one object, which under the hood will invoke 
+the `__call__` function on `nn.Module` and consequently the `forward` method 
+when called like this:
+```python
+prediction, losses = TrainingModelWithLoss(Network())(data, labels)
+```
+"""
 class TrainingModelWithLoss(torch.nn.Module):
     def __init__(self, model):
         super().__init__()
@@ -78,68 +169,91 @@ class TrainingModelWithLoss(torch.nn.Module):
 
     def forward(self, args, loss_inputs=None):
         output = self.model(args)
-        if loss_inputs is None:
-            return output
-        else:
-            loss = self.loss(output, loss_inputs)
-            return output, loss
-
-
+        loss = self.loss(output, loss_inputs)
+        return output, loss
+"""
+Let's initiate the neural network from our defined classes.
+"""
+model = Network()
+model_with_loss = TrainingModelWithLoss(model)
+model_opts = poptorch.Options().deviceIterations(batches_per_step)
+"""
+We can check if the model is assembled correctly by printing the string 
+representation of the model object
+"""
+print(model_with_loss)
+"""
+Now we apply the model wrapping function, which will perform a shallow copy
+of the PyTorch model. To perform the machine learning operations, we also
+will use the Stochastic Gradient Descent with no momentum [SGD](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/reference.html#poptorch.optim.SGD).
+"""
+training_model = poptorch.trainingModel(
+    model_with_loss,
+    model_opts,
+    optimizer=optim.SGD(model.parameters(), lr=learning_rate)
+)
+"""
+We are ready to start training. However to track the accuracy while training
+we need to define one more helper function. During the training, not every 
+samples prediction is returned for efficiency reasons, so this helper function
+will check accuracy for labels where prediction is available.
+"""
 def accuracy(predictions, labels):
     _, ind = torch.max(predictions, 1)
-    # provide labels only for samples, where prediction is available (during the training, not every samples prediction is returned for efficiency reasons)
     labels = labels[-predictions.size()[0]:]
-    accuracy = torch.sum(torch.eq(ind, labels)).item() / labels.size()[0] * 100.0
+    accuracy = \
+        torch.sum(torch.eq(ind, labels)).item() / labels.size()[0] * 100.0
     return accuracy
+"""
+This code will perform the requested amount of epochs and batches using the
+configured Graphcore IPUs.
+"""
+nr_batches = len(training_data)
 
-
-def train(training_model, training_data, opts):
-    nr_batches = len(training_data)
-    for epoch in range(1, opts.epochs+1):
-        print("Epoch {0}/{1}".format(epoch, opts.epochs))
-        bar = tqdm(training_data, total=nr_batches)
+for epoch in tqdm(range(1, epochs+1), leave=True, desc="Epochs", total=epochs):
+    with tqdm(training_data, total=nr_batches, leave=False) as bar:
         for data, labels in bar:
             preds, losses = training_model(data, labels)
-            with torch.no_grad():
+            with torch.inference_mode():
                 mean_loss = torch.mean(losses).item()
                 acc = accuracy(preds, labels)
-            bar.set_description("Loss:{:0.4f} | Accuracy:{:0.2f}%".format(mean_loss, acc))
+            bar.set_description(
+                "Loss: {:0.4f} | Accuracy: {:05.2F}% ".format(mean_loss, acc)
+            )
+# sst_hide_output
+"""
+Update the weights in model by copying from the training IPU. 
+This updates `model.parameters()`.
+"""
+training_model.copyWeightsToHost()
 
+"""
+Release resources:
+"""
+training_model.detachFromDevice()
+"""
+Check validation loss on IPU once trained. Because PopTorch will be compiled 
+on first call the weights in `model.parameters()` will be copied implicitly. 
+Subsequent calls will need to call `inference_model.copyWeightsToDevice()`.
+"""
+inference_model = poptorch.inferenceModel(model)
 
-def test(inference_model, test_data):
-    nr_batches = len(test_data)
-    sum_acc = 0.0
-    with torch.no_grad():
-        for data, labels in tqdm(test_data, total=nr_batches):
+"""
+Perform validation
+"""
+nr_batches = len(test_data)
+sum_acc = 0.0
+with torch.no_grad():
+    with tqdm(test_data, total=nr_batches, leave=False) as bar:
+        for data, labels in bar:
             output = inference_model(data)
             sum_acc += accuracy(output, labels)
-    print("Accuracy on test set: {:0.2f}%".format(sum_acc / len(test_data)))
-
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='MNIST training in PopTorch')
-    parser.add_argument('--batch-size', type=int, default=8, help='batch size for training (default: 8)')
-    parser.add_argument('--batches-per-step', type=int, default=50, help='device iteration (default:50)')
-    parser.add_argument('--test-batch-size', type=int, default=80, help='batch size for testing (default: 80)')
-    parser.add_argument('--epochs', type=int, default=10, help='number of epochs to train (default: 10)')
-    parser.add_argument('--lr', type=float, default=0.05, help='learning rate (default: 0.05)')
-    opts = parser.parse_args()
-
-    training_data, test_data = get_mnist_data(opts)
-    model = Network()
-    model_with_loss = TrainingModelWithLoss(model)
-    model_opts = poptorch.Options().deviceIterations(opts.batches_per_step)
-    training_model = poptorch.trainingModel(model_with_loss, model_opts, optimizer=optim.SGD(model.parameters(), lr=opts.lr))
-
-    inference_model = poptorch.inferenceModel(model)
-
-    # run training, on IPU
-    train(training_model, training_data, opts)
-
-    # Update the weights in model by copying from the training IPU. This updates (model.parameters())
-    training_model.copyWeightsToHost()
-
-    # Check validation loss on IPU once trained. Because PopTorch will be compiled on first call the
-    # weights in model.parameters() will be copied implicitly. Subsequent calls will need to call
-    # inference_model.copyWeightsToDevice()
-    test(inference_model, test_data)
+# sst_hide_output
+"""
+Finally the accuracy on the test set is:
+"""
+print("Accuracy on test set: {:0.2f}%".format(sum_acc / len(test_data)))
+"""
+Release resources:
+"""
+inference_model.detachFromDevice()

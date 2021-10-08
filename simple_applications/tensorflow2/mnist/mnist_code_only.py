@@ -1,4 +1,4 @@
-# Copyright (c) 2021 Graphcore Ltd. All rights reserved.
+# Copyright (c) 2020 Graphcore Ltd. All rights reserved.
 import tensorflow as tf
 from matplotlib import pyplot as plt
 
@@ -47,4 +47,3 @@ with strategy.scope():
         steps_per_execution=100
     )
     model.fit(train_ds, steps_per_epoch=2000, epochs=4)
-    

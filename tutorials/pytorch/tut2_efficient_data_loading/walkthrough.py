@@ -477,7 +477,6 @@ Now we are ready to conduct experiments
 validate_model_performance(dataset, batch_size=16, replicas=1,
                            device_iterations=50, num_workers=8,
                            synthetic_data=True)
-# sst_hide_output
 """
 => Global batch size 16 with real data
 """
@@ -485,14 +484,7 @@ validate_model_performance(dataset, batch_size=16, replicas=1,
                            device_iterations=50, num_workers=8,
                            synthetic_data=False)
 
-# sst_hide_output
 """
-DataLoader throughput: 43736 items/s  
-Synthetic data throughput: 33964 items/s  
-Real data throughput: 21280 items/s
-
-In that case, if the DataLoader throughput fell below 33964, it could be 
-limiting. It is actually fine here.
 
 ***Why is the throughput lower with real data?***  
 As mentioned previously, using synthetic data does not include the stream 
@@ -516,19 +508,13 @@ at a time on a single IPU.
 validate_model_performance(dataset, batch_size=16, replicas=4,
                            device_iterations=50, num_workers=8,
                            synthetic_data=True)
-# sst_hide_output
 """
 => Global batch size 64 with real data
 """
 validate_model_performance(dataset, batch_size=16, replicas=4,
                            device_iterations=50, num_workers=8,
                            synthetic_data=False)
-# sst_hide_output
 """
-DataLoader throughput: 131633 items/s  
-Synthetic data throughput: 136907 items/s  
-Real data throughput: 36088 items/s  
-
 This example gave an idea of how increasing the global batch size can improve 
 the throughput.
 

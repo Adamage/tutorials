@@ -263,7 +263,7 @@ print(f"DataLoader throughput: {items_per_second:.2f} items/s")
 ```
 
     Total execution time: 0.17 s
-    DataLoader throughput: 54892.53 items/s
+    DataLoader throughput: 56387.92 items/s
 
 
 2)	Evaluate the IPU throughput with synthetic data.
@@ -335,8 +335,8 @@ print(f"IPU throughput: {items_per_second:.2f} items/s")
 ```
 
     Evaluating: 12 steps of 800 items
-    Total execution time: 0.28 s
-    IPU throughput: 34133.10 items/s
+    Total execution time: 0.29 s
+    IPU throughput: 33455.27 items/s
 
 
 ### What if the DataLoader throughput is too low?
@@ -476,6 +476,12 @@ validate_model_performance(dataset, batch_size=16, replicas=1,
                            synthetic_data=True)
 ```
 
+    DataLoader: 51685.82 items/s
+
+
+    IPU throughput: 34306.55 items/s
+
+
 => Global batch size 16 with real data
 
 
@@ -483,20 +489,17 @@ validate_model_performance(dataset, batch_size=16, replicas=1,
 validate_model_performance(dataset, batch_size=16, replicas=1,
                            device_iterations=50, num_workers=8,
                            synthetic_data=False)
-
 ```
 
-DataLoader throughput: 43736 items/s  
-Synthetic data throughput: 33964 items/s  
-Real data throughput: 21280 items/s
+    DataLoader: 55400.44 items/s
 
-In that case, if the DataLoader throughput fell below 33964, it could be 
-limiting. It is actually fine here.
+
+    IPU throughput: 21901.16 items/s
+
 
 ***Why is the throughput lower with real data?***  
 As mentioned previously, using synthetic data does not include the stream 
 copies on the IPU. It also excludes the synchronisation time with the host. 
-
 
 ### Case 2: Larger global batch size with replication
 
@@ -518,6 +521,10 @@ validate_model_performance(dataset, batch_size=16, replicas=4,
                            synthetic_data=True)
 ```
 
+    DataLoader: 127750.16 items/s
+    IPU throughput: 136452.36 items/s
+
+
 => Global batch size 64 with real data
 
 
@@ -527,9 +534,11 @@ validate_model_performance(dataset, batch_size=16, replicas=4,
                            synthetic_data=False)
 ```
 
-DataLoader throughput: 131633 items/s  
-Synthetic data throughput: 136907 items/s  
-Real data throughput: 36088 items/s  
+    DataLoader: 116469.35 items/s
+
+
+    IPU throughput: 36512.13 items/s
+
 
 This example gave an idea of how increasing the global batch size can improve 
 the throughput.

@@ -330,7 +330,10 @@ with ipu.scopes.ipu_scope("/device:IPU:0"):
 outfeed_op = outfeed_queue.dequeue()
 # sst_hide_output
 """"
-Configure the IPU. 
+Configure the IPU.  The auto_select_ipus option is used to set the limit of 
+used IPUs. In this example we need only one IPU, however this parameter could 
+be changed in order to obtain data parallelism. If you are interested you can 
+find more information in [documentation](https://docs.graphcore.ai/projects/tensorflow1-user-guide/en/latest/perf_training.html?#selecting-the-number-of-replicas).
 """
 
 ipu.utils.move_variable_initialization_to_cpu()
@@ -357,13 +360,10 @@ def train():
             sess.run(compiled_model, {learning_rate: LEARNING_RATE})
             # Read the outfeed for the training losses
             losses = sess.run(outfeed_op)
-            if losses is not None and len(losses):
-                epoch = float(examples_per_step * step / num_examples)
-                if step == (steps - 1) or (step % 10) == 0:
-                    print("Step {}, Epoch {:.1f}, Mean loss: {:.3f}".format(
-                        step, epoch, np.mean(losses)))
-            elif step > 2:
-                print('Step > 2 and loss is None', losses)
+            epoch = float(examples_per_step * step / num_examples)
+            if step == (steps - 1) or (step % 10) == 0:
+                print("Step {}, Epoch {:.1f}, Mean loss: {:.3f}".format(
+                    step, epoch, np.mean(losses)))
         end = time.time()
         elapsed = end - begin
         samples_per_second = training_samples / elapsed

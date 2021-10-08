@@ -115,14 +115,16 @@ Note:
 * Each individual batch passed through the pipeline is called a **mini-batch**.  
 * Weights are updated only once a set of mini-batches has been fully processed.  
 * Gradients are accumulated across a set of mini-batches.  
-* Weight updates are applied once all the complete set of mini-batches are processed.  
+* Weight updates are applied once all the complete set of mini-batches are 
+processed.  
 
 In short, pipelining enforces **gradient accumulation** where:  
 
-`effective batch size` = `mini-batch size` * `gradient accumulation count`  
+`effective batch size = mini-batch size * gradient accumulation count`  
 
-Performing gradient accumulation is valid because summing the gradients across 
-all the examples in a batch immediately and accumulating them over several steps are equivalent.  
+Performing gradient accumulation is still valid because summing the gradients 
+across all the examples in a batch immediately and accumulating them over 
+several steps are equivalent.  
 
 Increasing the gradient accumulation count has these benefits:
 
@@ -136,7 +138,7 @@ followed by a weight update. Notice that the best utilization of the IPUs is
 during the main phase and that this is sustained until the last mini-batch enters 
 the pipeline, following which the ramp down begins. Also notice that weight 
 updates are only applied once, following the ramp down (after the pipeline has 
-been drained of all mini-batches.)
+been drained of all mini-batches).
 
 ![Execution Phases](images/execution_phases.png)
 """
@@ -168,7 +170,7 @@ The code we will start with can also be found [`step1_single_ipu.py`](step1_sing
 Here is a slightly simplified version of it. Take a look at the code and 
 familiarise yourself with it. 
 
-We start with importing all necessary libraries
+We start with importing all necessary libraries.
 """
 
 import time
@@ -195,7 +197,7 @@ ModuleNotFoundError: No module named 'tensorflow'
 """
 """
 Set hyperparameters, if you want to run the script with different ones remember
-to rerun all cells below
+to rerun all cells below.
 """
 BATCH_SIZE = 32
 REPEAT_COUNT = 160  # The number of times the pipeline will be executed for each step.
@@ -203,7 +205,11 @@ EPOCHS = 50
 LEARNING_RATE = 0.01
 BATCHES_TO_ACCUMULATE = 16  # How many batches to process before processing gradients and updating weights.
 """
-Create a function responsible for generating a dataset
+Create a function responsible for generating a dataset. Remember to set 
+`dataset.batch(drop_remainder=True)` because XLA (and the compiled static IPU 
+graph) expect a complete, fixed sized, set of data as input. Moreover, caching
+and prefetching are important to prevent the host data feed from being the 
+bottleneck for throughput.
 """
 
 
@@ -223,10 +229,6 @@ def create_dataset(batch_size):
 
     num_examples = len(x_train)
     dataset = tf.data.Dataset.from_generator(generator, types, shapes)
-    # Use 'drop_remainder=True' because XLA (and the compiled static IPU graph)
-    # expect a complete, fixed sized, set of data as input.
-    # Caching and prefetching are important to prevent the host data
-    # feed from being the bottleneck for throughput.
     dataset = dataset.batch(batch_size, drop_remainder=True)
     dataset = dataset.shuffle(num_examples)
     dataset = dataset.cache()
@@ -240,13 +242,14 @@ num_examples, dataset = create_dataset(batch_size=BATCH_SIZE)
 num_train_examples = int(EPOCHS * num_examples)
 # sst_hide_output
 """
-Create the data queues from/to IPU
+Create the data queues from/to IPU.
 """
 infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
 outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
 """
-With batch size BS and repeat count RPT, at every step n = (BS * RPT) examples 
-are used. Ensure we process a whole multiple of the batch accumulation count.
+With batch size equal to `BATCH_SIZE` and repeat count set to `REPEAT_COUNT`,
+at every step `n = BATCH_SIZE * REPEAT_COUNT` examples are used. Ensure we 
+process a whole multiple of the batch accumulation count.
 """
 remainder = REPEAT_COUNT % BATCHES_TO_ACCUMULATE
 if remainder > 0:
@@ -255,7 +258,7 @@ if remainder > 0:
           f'batches-to-accumulate (== {REPEAT_COUNT})')
 examples_per_step = BATCH_SIZE * REPEAT_COUNT
 """
-In order to evaluate at least N total examples, do ceil(N / n) steps
+In order to evaluate at least N total examples, do ceil(N / n) steps.
 """
 steps = (num_train_examples + examples_per_step - 1) // examples_per_step
 training_samples = steps * examples_per_step
@@ -263,7 +266,7 @@ print(f'Steps {steps} x examples per step {examples_per_step} '
       f'(== {training_samples} training examples, {training_samples / num_examples:.2f} '
       f'epochs of {num_examples} examples)')
 """
-Now we will compile the learning rate and create the model 
+Now we will compile the learning rate and create the model .
 """
 with tf.device('cpu'):
     learning_rate = tf.placeholder(np.float32, [])
@@ -276,21 +279,29 @@ def model(learning_rate, images, labels):
     # The scoping here helps clarify the execution trace when using --profile.
     with tf.variable_scope("flatten"):
         activations = layers.Flatten()(images)
+
     with tf.variable_scope("dense256"):
         activations = layers.Dense(256, activation=tf.nn.relu)(activations)
+
     with tf.variable_scope("dense128"):
         activations = layers.Dense(128, activation=tf.nn.relu)(activations)
+
     with tf.variable_scope("dense64"):
         activations = layers.Dense(64, activation=tf.nn.relu)(activations)
+
     with tf.variable_scope("dense32"):
         activations = layers.Dense(32, activation=tf.nn.relu)(activations)
+
     with tf.variable_scope("logits"):
         logits = layers.Dense(10)(activations)
+
     with tf.variable_scope("softmax_ce"):
         cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
             labels=labels, logits=logits)
+
     with tf.variable_scope("mean"):
         loss = tf.reduce_mean(cross_entropy)
+
     with tf.variable_scope("optimizer"):
         optimizer = tf.train.GradientDescentOptimizer(
             learning_rate=learning_rate)
@@ -298,6 +309,7 @@ def model(learning_rate, images, labels):
             optimizer = ipu.optimizers.GradientAccumulationOptimizerV2(
                 optimizer, num_mini_batches=BATCHES_TO_ACCUMULATE)
         train_op = optimizer.minimize(loss=loss)
+
     return learning_rate, train_op, outfeed_queue.enqueue(loss)
 
 
@@ -318,7 +330,7 @@ with ipu.scopes.ipu_scope("/device:IPU:0"):
 outfeed_op = outfeed_queue.dequeue()
 # sst_hide_output
 """"
-Configure the IPU.
+Configure the IPU. 
 """
 
 ipu.utils.move_variable_initialization_to_cpu()
@@ -330,7 +342,7 @@ ipu_configuration.configure_ipu_system()
 # sst_hide_output
 
 """
-We are ready to start the training process!
+We are ready to start the training process.
 """
 
 
@@ -350,6 +362,8 @@ def train():
                 if step == (steps - 1) or (step % 10) == 0:
                     print("Step {}, Epoch {:.1f}, Mean loss: {:.3f}".format(
                         step, epoch, np.mean(losses)))
+            elif step > 2:
+                print('Step > 2 and loss is None', losses)
         end = time.time()
         elapsed = end - begin
         samples_per_second = training_samples / elapsed
@@ -361,7 +375,7 @@ train()
 print("Stage 1 ran successfully")
 # sst_hide_output
 """
-You can also run it with `$ python3 step1_single_ipu.py`  
+You can also run it with `$ python3 step1_single_ipu.py`.
 
 The model is running on a single IPU without pipelining. You should see it train 
 with output similar to this below:
@@ -421,7 +435,7 @@ You should see something like this (zoomed in to show a single mini-batch):
 
 The key points to note are:
 
-* IPU0 runs all layers from 'flatten' to 'softmax_ce' and the optimizer.  
+* IPU0 runs all layers from `flatten` to `softmax_ce` and the optimizer.  
 * Because `GradientAccumulationOptimizerV2` is being used, the gradient descent 
 is deferred until `BATCHES_TO_ACCUMULATE` mini-batches have been processed.
 * The application uses `with tf.variable_scope(...)` to declare a context manager
@@ -452,7 +466,7 @@ that will end up running on IPU0
 that will end up running on IPU1
 
 Then, we split the model across the two scopes, so that IPU0 runs layers 
-'flatten' to 'dense64' and IPU1 runs layers ' dense32' to 'softmax_ce' plus 
+`flatten` to `dense64` and IPU1 runs layers  `dense32` to `softmax_ce` plus 
 the optimizer.
 
 After this change is applied, the model definition function should look like
@@ -473,6 +487,7 @@ def model(learning_rate, images, labels):
             activations = layers.Dense(128, activation=tf.nn.relu)(activations)
         with tf.variable_scope("dense64"):
             activations = layers.Dense(64, activation=tf.nn.relu)(activations)
+
     with ipu.scopes.ipu_shard(1):
         with tf.variable_scope("dense32"):
             activations = layers.Dense(32, activation=tf.nn.relu)(activations)
@@ -505,7 +520,7 @@ ipu_configuration.auto_select_ipus = 2
 ipu_configuration.configure_ipu_system()
 # sst_hide_output
 """
-We are ready to compile model again and start the training process:
+We are ready to compile model again and start the training process.
 """
 
 infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
@@ -556,8 +571,8 @@ You should see something like this (zoomed in to show a single mini-batch):
 
 The key points to note are:
 
-* IPU0 runs layers 'flatten' to 'dense64'.
-* IPU1 runs layers 'dense32' to 'softmax_ce' and the optimizer.
+* IPU0 runs layers `flatten` to `dense64`.
+* IPU1 runs layers `dense32` to `softmax_ce` and the optimizer.
 * It is not efficient because execution is serialised (there is poor
   utilisation).
 * Because `GradientAccumulationOptimizerV2` is being used, the gradient descent
@@ -708,10 +723,10 @@ definitions; the first layer is `layer1_flatten`.
 Remember, the pipelining API takes a series of Python functions
 as `computational_stages`; to support this, first we will make each layer its
 own Python function.  
-The first layer must take the explicit 'learning_rate' (learning rate) argument
-and implicit (feed) arguments 'images' and 'labels' as arguments.  
-It should return the same 'learning_rate', layer output ('activations'), and '
-labels'. These will be fed to the next layer as input arguments.
+The first layer must take the explicit `learning_rate` (learning rate) argument
+and implicit (feed) arguments `images` and `labels` as arguments.  
+It should return the same `learning_rate`, layer output (`activations`), and 
+`labels`. These will be fed to the next layer as input arguments.
 """
 
 
@@ -722,12 +737,12 @@ def layer1_flatten(learning_rate, images, labels):
 
 
 """
-Then, we add the next layer definition, `layer_dense256`
+Then, we add the next layer definition, `layer_dense256`.
 
 Each subsequent layer must take the outputs of the previous layer as
 arguments.  
-This dense layer should return the 'learning_rate', layer output ('
-activations'), and 'labels'.
+This dense layer should return the `learning_rate`, layer output 
+(`activations`), and `labels`.
 """
 
 
@@ -777,7 +792,7 @@ For the cross entropy loss and mean, let's combine these into a single
 cross-entropy loss layer, `layer7_cel`.
 
 This layer must take the outputs from `layer6_logits` as arguments.  
-It should return just 'learning_rate' and final 'loss'.
+It should return just `learning_rate` and final `loss`.
 """
 
 
@@ -794,9 +809,9 @@ def layer7_cel(learning_rate, logits, labels):
 We add an optimizer function, `optimizer_function`.
 
 This function must take the outputs from the last layer, `layer7_cel`, as
-arguments; these are 'learning_rate' and 'loss'.   
+arguments; these are `learning_rate` and `loss`.   
 Return a `tf.train.GradientDescentOptimizer` with argument
-learning_rate=learning_rate.  
+`learning_rate=learning_rate`.  
 Return the optimizer and the loss wrapped
 with `ipu.pipelining_ops.OptimizerFunctionOutput`.
 """
@@ -821,9 +836,9 @@ def pipelined_model(learning_rate):
 # Defines a pipelined model which is split accross two stages
 ```
 
-Within `pipelined_model`, we need a definition for 'stage1, that must:
+Within `pipelined_model`, we need a definition for 'stage1', that must:
 
-- take the initial arguments ('learning_rate', 'images' and 'labels') as input.
+- take the initial arguments (`learning_rate`, `images` and `labels`) as input.
 - issue the previously defined layers `layer1_flatten` through
   to `layer4_dense64` in sequence.
 - pass the returns of each layer into the next layer.
@@ -901,11 +916,11 @@ stage2'.
 BATCHES_TO_ACCUMULATE.  
 `repeat_count` - specify the existing REPEAT_COUNT.  
 `inputs` - specify input arguments that are additional to those provided by the
-infeed queue; this is 'learning_rate'.  
+infeed queue; this is `learning_rate`.  
 `infeed_queue` - specify the existing infeed_queue.  
 `outfeed_queue` - specify the existing outfeed queue.  
 `optimizer_function` - specify the previously defined optimizer function.  
-`pipeline_schedule` - specify 'ipu.pipelining_ops.PipelineSchedule.Grouped'.
+`pipeline_schedule` - specify `ipu.pipelining_ops.PipelineSchedule.Grouped`.
 
 Notes:
 
@@ -914,7 +929,7 @@ Notes:
   in multiple stages must be passed between IPUs. Consider this detail when
   deciding where to put the split points for more complex pipelined models.
 * Infeeds and outfeeds are introduced
-  here: [Targeting the IPU from TensorFlow 1](<https://docs.graphcore.ai/projects/tensorflow1-user-guide/en/latest/perf_training.html#training-loops-data-sets-and-feed-queues>)
+  here: [Targeting the IPU from TensorFlow 1](<https://docs.graphcore.ai/projects/tensorflow1-user-guide/en/latest/perf_training.html#training-loops-data-sets-and-feed-queues>).
 * This tutorial demonstrates how an input, `learning_rate`, can be passed into
   the pipeline and propagated through all layers/stages to where it is needed,
   in this case, the optimizer. In reality, for this simple
@@ -923,14 +938,15 @@ Notes:
   
 Moreover, we will update step calculation. The pipeline API encapsulates the 
 repeat count and gradient accumulation count.
-With gradient accumulation count `GAC` and repeat count `RPT`, each
-session.run() will process `GAC`*`RPT` batches.
+With gradient accumulation count `BATCHES_TO_ACCUMULATE` and repeat count 
+`REPEAT_COUNT`, each session.run() will process 
+`BATCHES_TO_ACCUMULATE * REPEAT_COUNT` batches.
 
 Where `examples_per_step` was previously calculated as:
 
 ```python
-# With batch size BS and repeat count RPT,
-# at every step n = (BS * RPT) examples are used.
+# With batch size equal to `BATCH_SIZE` and repeat count set to `REPEAT_COUNT`,
+# at every step n = `BATCH_SIZE * REPEAT_COUNT` examples are used.
 # Ensure we process a whole multiple of the batch accumulation count.
 remainder = REPEAT_COUNT % BATCHES_TO_ACCUMULATE
 if remainder > 0:
@@ -947,12 +963,14 @@ REPEAT_COUNT = 10  # Before 160, while BATCHES_TO_ACCUMULATE=16
 examples_per_step = BATCH_SIZE * BATCHES_TO_ACCUMULATE * REPEAT_COUNT
 
 """
-Note that with batch size BS, gradient accumulation count GAC and repeat count RPT,
-at every step n = (BS * GAC * RPT) examples are used. We also changed the 
-default repeat count to 10 (from 160). The pipelined version will still process 
-160 batches each step (`GAC` 16 * `RPT` 10 == 160).
+Note that with batch size equal to `BATCH_SIZE`, gradient accumulation count 
+`BATCHES_TO_ACCUMULATE` and repeat count `REPEAT_COUNT`,
+at every step `n = BATCH_SIZE * BATCHES_TO_ACCUMULATE * REPEAT_COUNT` examples 
+are used. We also changed the default repeat count to 10 (from 160). The 
+pipelined version will still process 160 batches each step 
+(`BATCHES_TO_ACCUMULATE` 16 * `REPEAT_COUNT` 10 == 160).
 
-Compile the new `pipelined_model` instead of `loop_repeat_model`
+Compile the new `pipelined_model` instead of `loop_repeat_model`.
 """
 
 infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
@@ -988,7 +1006,7 @@ override it, as we do in this tutorial, if you have a specific requirement and
 want to be sure it is used.
 
 For details, including other options, see
-the [TensorFlow 1 User Guide - Selection Order](<https://docs.graphcore.ai/projects/tensorflow1-user-guide/en/latest/api.html#tensorflow.python.ipu.config.SelectionOrder>)
+the [TensorFlow 1 User Guide - Selection Order](<https://docs.graphcore.ai/projects/tensorflow1-user-guide/en/latest/api.html#tensorflow.python.ipu.config.SelectionOrder>).
 
 Now, we can run the modified application. You can also do that by running
 completed step 3 tutorial from answers directory with the following shell 
@@ -1044,8 +1062,8 @@ updated.
 
 The key points to note are:
 
-* IPU0 runs layers 'flatten' through to 'dense64'.
-* IPU1 runs layers 'dense32' through to 'softmax_ce'.
+* IPU0 runs layers `flatten` through to `dense64`.
+* IPU1 runs layers `dense32` through to `softmax_ce`.
 * The backward passes and weight updates for each layer are performed on the
   same IPU as the forward passes.
 * It is better than sharding because execution is parallelised (utilization is
@@ -1060,7 +1078,7 @@ Also, note:
   between IPUs still have an impact.
 * The number of IPUs in a multi-IPU device must be a power of 2. For example,
   if you try to select 3 IPUs to run 3 stages then you will see an
-  error: `Unsupported number of IPUs requested - could not find an IPU device with 3 IPUs`
+  error: `Unsupported number of IPUs requested - could not find an IPU device with 3 IPUs`.
 
 During the development and tuning of your pipelined model, the general aim is
 to balance the execution cycles across all the IPUs in the main phase, so that
@@ -1076,7 +1094,7 @@ running on the IPU and minimise interactions with the host.
 We encourage you to test the training script more deeply using different 
 parameters. You can do this by modifying the parameters in the notebook and 
 running the appropriate cell, but an error-free approach would be to use the 
-full script for training step 3 located in: [`answers/step3_pipelining.py`](answers/step3_pipelining.py)
+full script for training step 3 located in: [`answers/step3_pipelining.py`](answers/step3_pipelining.py).
 
 ##### Pipeline Schedule
 
@@ -1140,9 +1158,9 @@ This can use `globals()` to find all functions that match a specific syntax.
 
 - Find all functions that match `layer<idx>_<id>`. For example, this should
   find `layer1_flatten` and return an entry with idx==1 and id=="flatten".
-- Make each returned layer in the list a dictionary with keys 'func', 'id'
-  and 'idx'.
-- Layers should be sorted by 'idx' but do not need to be strictly sequential;
+- Make each returned layer in the list a dictionary with keys `func`, `id`
+  and `idx`.
+- Layers should be sorted by `idx` but do not need to be strictly sequential;
   this is so 'gaps' can be left to support insertion of layers when
   writing/developing your model.
 
@@ -1177,7 +1195,7 @@ def discover_layers():
 
 
 """
-Then, we add a function that will take the layer list and 'splits' argument and
+Then, we add a function that will take the layer list and `splits` argument and
 return a list of stages.
 
 Each stage should be a list of those layers in that stage.
@@ -1234,7 +1252,7 @@ def make_pipeline_stage(idx, stage):
 ```
 
 Build a list of computational_stages that can be passed to the pipelining API.
-Make each stage (function) and add it to the computational stages
+Make each stage (function) and add it to the computational stages:
 
 ```python
 computational_stages = []
@@ -1251,7 +1269,7 @@ computational_stages = computational_stages
 
 ```
 
-Complete, updated 'pipelined_model' looks like that:
+Complete, updated `pipelined_model` looks like that:
 """
 
 
@@ -1298,14 +1316,14 @@ reporting.
 
 model_layers = discover_layers()
 """
-Show final list of layers
+Show final list of layers.
 """
 print("Layers:")
 layer_list = [layer["id"] for layer in model_layers]
 print(" " + (", ".join(layer_list)))
 
 """
-Sequence layers into stage-groups
+Sequence layers into stage-groups.
 """
 stages = move_layers_to_stages(model_layers, SPLITS)
 if (len(stages) != len(SPLITS) + 1):
@@ -1321,7 +1339,7 @@ if num_stages != num_ipus:
         "Stage count must be power2 (specified {} versus next power2 {})".format(
             num_stages, num_ipus))
 """
-Show final list of staged layers
+Show final list of staged layers.
 """
 print("Stages:")
 for idx, stage in enumerate(stages):
@@ -1330,7 +1348,7 @@ for idx, stage in enumerate(stages):
     if len(layer_list) == 0:
         print("Unexpected empty stage - check splits are valid")
 """
-Compile new model
+Compile new model.
 """
 infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
 outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
@@ -1414,7 +1432,7 @@ performance when pipelining.
 
 Always refer to the technical note on TensorFlow pipelining for the most
 up-to-date and detailed
-information: [TensorFlow Model Parallelism - Pipelining](<https://docs.graphcore.ai/projects/tf-model-parallelism/en/latest/pipelining.html#pipelining>)
+information: [TensorFlow Model Parallelism - Pipelining](<https://docs.graphcore.ai/projects/tf-model-parallelism/en/latest/pipelining.html#pipelining>).
 
 """
 """
@@ -1432,7 +1450,7 @@ recomputation, where using recomputation allows a model and mini-batch size to
 fit that would otherwise be out-of-memory on the IPU.
 
 Refer to the technical note on TensorFlow Model Parallelism for full
-details: [TensorFlow Model Parallelism - Pipelining Recomputation](<https://docs.graphcore.ai/projects/tf-model-parallelism/en/latest/pipelining.html#recomputation>)
+details: [TensorFlow Model Parallelism - Pipelining Recomputation](<https://docs.graphcore.ai/projects/tf-model-parallelism/en/latest/pipelining.html#recomputation>).
 
 """
 """
@@ -1443,7 +1461,7 @@ some variables and activations in Streaming Memory. This saves IPU memory at
 the expense of time to swap the data on and off the IPU.
 
 Refer to the technical note on TensorFlow Model Parallelism for full
-details: [TensorFlow Model Parallelism - Pipelining Variable Offloading](<https://docs.graphcore.ai/projects/tf-model-parallelism/en/latest/pipelining.html#variable-offloading>)
+details: [TensorFlow Model Parallelism - Pipelining Variable Offloading](<https://docs.graphcore.ai/projects/tf-model-parallelism/en/latest/pipelining.html#variable-offloading>).
 
 """
 """
@@ -1465,7 +1483,7 @@ variable). You may want to override this if you are training in float16 and you
 want to use a float32 accumulator buffer.
 
 See the TensorFlow 1 API documentation for
-details: [TensorFlow1 Pipelining API](<https://docs.graphcore.ai/projects/tensorflow1-user-guide/en/latest/api.html#tensorflow.python.ipu.pipelining_ops.pipeline>)
+details: [TensorFlow1 Pipelining API](<https://docs.graphcore.ai/projects/tensorflow1-user-guide/en/latest/api.html#tensorflow.python.ipu.pipelining_ops.pipeline>).
 
 """
 """
@@ -1475,8 +1493,7 @@ It is possible to combine data parallelism with model parallelism by using the
 standard `CrossReplicaOptimizer`, which is used for training replicated models,
 in the pipeline optimiser function. In this case:
 
-`effective batch size` = `replication factor` * `mini-batch size` * `gradient 
-accumulation count`
+`effective batch size = replication factor * mini-batch size * gradient accumulation count`
 
 """
 """

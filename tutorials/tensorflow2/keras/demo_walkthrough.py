@@ -129,7 +129,7 @@ model = keras.Model(*model_fn())
 # and Categorical Cross Entropy as a loss.
 model.compile('sgd', 'categorical_crossentropy', metrics=["accuracy"])
 
-print(model.summary())
+model.summary()
 
 print('\nTraining')
 model.fit(x_train, y_train, epochs=3, batch_size=batch_size)
@@ -222,6 +222,7 @@ To use the IPU, you must create an IPU session configuration:
 ipu_config = ipu.config.IPUConfig()
 ipu_config.auto_select_ipus = 1
 ipu_config.configure_ipu_system()
+# sst_hide_output
 """
 This is all we need to get a small model up and running, though a full list of 
 configuration options is available in the [API documentation](https://docs.graphcore.ai/projects/tensorflow-user-guide/en/latest/api.html#tensorflow.python.ipu.config.IPUConfig).
@@ -250,13 +251,15 @@ print('Keras MNIST example, running on IPU')
 (x_train, y_train), (x_test, y_test) = prepare_data_trim_to_size()
 
 with strategy.scope():
+    # Model.__init__ takes two required arguments, inputs and outputs.
     model = keras.Model(*model_fn())
 
+    # Compile our model with Stochastic Gradient Descent as an optimizer
+    # and Categorical Cross Entropy as a loss.
     model.compile('sgd', 'categorical_crossentropy', metrics=["accuracy"])
-
     model.summary()
-    print('\nTraining')
 
+    print('\nTraining')
     model.fit(x_train, y_train, epochs=3, batch_size=64)
 
     print('\nEvaluation')
@@ -333,29 +336,21 @@ print('Keras MNIST example, running on IPU with steps_per_execution')
 (x_train, y_train), (x_test, y_test) = prepare_data_trim_to_size()
 
 with strategy.scope():
+    # Model.__init__ takes two required arguments, inputs and outputs.
     model = keras.Model(*model_fn())
 
     # Compile our model with Stochastic Gradient Descent as an optimizer
     # and Categorical Cross Entropy as a loss.
     model.compile('sgd', 'categorical_crossentropy', metrics=["accuracy"],
                   steps_per_execution=len(x_train) // batch_size)
-
     model.summary()
-    print('\nTraining')
 
+    print('\nTraining')
     model.fit(x_train, y_train, epochs=3, batch_size=64)
 
     print('\nEvaluation')
-    model.evaluate(x_test, y_test)
-
-    model.summary()
-    print('\nTraining')
-
-    model.fit(x_train, y_train, epochs=3, batch_size=batch_size)
     model.compile('sgd', 'categorical_crossentropy', metrics=["accuracy"],
                   steps_per_execution=len(x_test) // batch_size)
-
-    print('\nEvaluation')
     model.evaluate(x_test, y_test, batch_size=batch_size)
 # sst_hide_output
 """
@@ -410,6 +405,8 @@ We'll need to acquire multiple IPUs, so we update the configuration step:
 ipu_config = ipu.config.IPUConfig()
 ipu_config.auto_select_ipus = num_ipus
 ipu_config.configure_ipu_system()
+# sst_hide_output
+
 
 """
 These are all the changes we need to make to replicate the model and train on 
@@ -422,6 +419,7 @@ print('Keras MNIST example, running on IPU with replication')
 (x_train, y_train), (x_test, y_test) = prepare_data_trim_to_size()
 
 with strategy.scope():
+    # Model.__init__ takes two required arguments, inputs and outputs.
     model = keras.Model(*model_fn())
 
     # Compile our model with Stochastic Gradient Descent as an optimizer
@@ -429,25 +427,15 @@ with strategy.scope():
     train_steps = make_divisible(len(x_train))
     model.compile('sgd', 'categorical_crossentropy', metrics=["accuracy"],
                   steps_per_execution=train_steps // (batch_size * num_replicas))
-
     model.summary()
-    print('\nTraining')
 
+    print('\nTraining')
     model.fit(x_train, y_train, epochs=3, batch_size=64)
 
     print('\nEvaluation')
-    model.evaluate(x_test, y_test)
-
-    model.summary()
-    print('\nTraining')
-
-    model.fit(x_train, y_train, epochs=3, batch_size=batch_size)
-
     test_steps = make_divisible(len(x_test))
     model.compile('sgd', 'categorical_crossentropy', metrics=["accuracy"],
                   steps_per_execution=test_steps // (batch_size * num_replicas))
-
-    print('\nEvaluation')
     model.evaluate(x_test, y_test, batch_size=batch_size)
 # sst_hide_output
 """
@@ -492,6 +480,7 @@ the number of gradient accumulation steps per replica:
 num_ipus = 2
 num_replicas = num_ipus // 2
 gradient_accumulation_steps_per_replica = 8
+# sst_hide_output
 
 """
 The number of gradient accumulation steps is the number of batches for which we 
@@ -562,6 +551,7 @@ print('Keras MNIST example, running on IPU with pipelining')
 (x_train, y_train), (x_test, y_test) = prepare_data_trim_to_size()
 
 with strategy.scope():
+    # Model.__init__ takes two required arguments, inputs and outputs.
     model = keras.Model(*model_fn_pipielines())
 
     model.set_pipelining_options(
@@ -569,21 +559,20 @@ with strategy.scope():
         pipeline_schedule=ipu.ops.pipelining_ops.PipelineSchedule.Grouped
     )
 
+    # Compile our model with Stochastic Gradient Descent as an optimizer
+    # and Categorical Cross Entropy as a loss.
     train_steps_per_execution = make_divisible(len(x_train)) // (batch_size * num_replicas)
     model.compile('sgd', 'categorical_crossentropy', metrics=["accuracy"],
                   steps_per_execution=train_steps_per_execution)
-
-    print(model.summary())
+    model.summary()
 
     print('\nTraining')
-
     model.fit(x_train, y_train, epochs=3, batch_size=batch_size)
 
     print('\nEvaluation')
     test_steps_per_execution = make_divisible(len(x_test)) // (batch_size * num_replicas)
     model.compile('sgd', 'categorical_crossentropy', metrics=["accuracy"],
                   steps_per_execution=test_steps_per_execution)
-
     model.evaluate(x_test, y_test, batch_size=batch_size)
 # sst_hide_output
 """

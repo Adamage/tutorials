@@ -257,13 +257,18 @@ with catchtime() as t:
         a, b = data, labels
 
 print(f"Total execution time: {t.seconds:.2f} s")
-
 items_per_second = (steps * device_iterations * batch_size * replicas) / t.seconds
 print(f"DataLoader throughput: {items_per_second:.2f} items/s")
+
+training_data.terminate()
 ```
 
-    Total execution time: 0.17 s
-    DataLoader throughput: 56387.92 items/s
+    Total execution time: 0.16 s
+    DataLoader throughput: 58346.23 items/s
+
+
+Note, that we manually terminated DataLoader object in order to inform the 
+object that processing is complete and to avoid errors.
 
 
 2)	Evaluate the IPU throughput with synthetic data.
@@ -332,11 +337,13 @@ with catchtime() as t:
 items_per_second = (steps * device_iterations * batch_size * replicas) / t.seconds
 print(f"Total execution time: {t.seconds:.2f} s")
 print(f"IPU throughput: {items_per_second:.2f} items/s")
+
+training_data.terminate()
 ```
 
     Evaluating: 12 steps of 800 items
-    Total execution time: 0.29 s
-    IPU throughput: 33455.27 items/s
+    Total execution time: 0.28 s
+    IPU throughput: 33784.33 items/s
 
 
 ### What if the DataLoader throughput is too low?
@@ -456,6 +463,8 @@ def validate_model_performance(dataset, device_iterations=50,
 
     items_per_second = (steps * device_iterations * batch_size * replicas) / t.seconds
     print(f"IPU throughput: {items_per_second:.2f} items/s")
+
+    training_data.terminate()
 ```
 
 Now we are ready to conduct experiments
@@ -476,10 +485,10 @@ validate_model_performance(dataset, batch_size=16, replicas=1,
                            synthetic_data=True)
 ```
 
-    DataLoader: 51685.82 items/s
+    DataLoader: 46904.62 items/s
 
 
-    IPU throughput: 34306.55 items/s
+    IPU throughput: 34055.04 items/s
 
 
 => Global batch size 16 with real data
@@ -491,10 +500,10 @@ validate_model_performance(dataset, batch_size=16, replicas=1,
                            synthetic_data=False)
 ```
 
-    DataLoader: 55400.44 items/s
+    DataLoader: 59256.05 items/s
 
 
-    IPU throughput: 21901.16 items/s
+    IPU throughput: 21544.96 items/s
 
 
 ***Why is the throughput lower with real data?***  
@@ -521,8 +530,8 @@ validate_model_performance(dataset, batch_size=16, replicas=4,
                            synthetic_data=True)
 ```
 
-    DataLoader: 127750.16 items/s
-    IPU throughput: 136452.36 items/s
+    DataLoader: 104683.40 items/s
+    IPU throughput: 136261.19 items/s
 
 
 => Global batch size 64 with real data
@@ -534,10 +543,10 @@ validate_model_performance(dataset, batch_size=16, replicas=4,
                            synthetic_data=False)
 ```
 
-    DataLoader: 116469.35 items/s
+    DataLoader: 97995.13 items/s
 
 
-    IPU throughput: 36512.13 items/s
+    IPU throughput: 37289.57 items/s
 
 
 This example gave an idea of how increasing the global batch size can improve 

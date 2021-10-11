@@ -90,7 +90,8 @@ train_dataloader = poptorch.DataLoader(opts,
                                        train_dataset,
                                        batch_size=12,
                                        shuffle=True,
-                                       num_workers=40)
+                                       num_workers=40,
+                                       mode=poptorch.DataLoaderMode.Async)
 
 model.train()
 poptorch_model = poptorch.trainingModel(model,

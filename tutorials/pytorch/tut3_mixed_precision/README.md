@@ -326,7 +326,8 @@ train_dataloader = poptorch.DataLoader(opts,
                                        train_dataset,
                                        batch_size=12,
                                        shuffle=True,
-                                       num_workers=40)
+                                       num_workers=40,
+                                       mode=poptorch.DataLoaderMode.Async)
 ```
 
 We first make sure our model is in training mode, and then wrap it 
@@ -352,7 +353,14 @@ for epoch in tqdm(range(epochs), desc="epochs"):
         total_loss += loss
 ```
 
-Release resources:
+Release resources - detach IPU devices and also execute method `terminate` 
+of the `DataLoader` instance to fully terminate all worker threads.
+
+The need for terminating the workers manually arises from the fact that we use
+here the Asynchronous Data Loader `DataLoaderMode.Async` and that the data
+sample count is not exactly divisible by the resulting number of multiplied
+batch size and device count, leaving some workers waiting for their turn which
+might not happen due to training ending first before all samples are exhausted.
 
 
 ```python

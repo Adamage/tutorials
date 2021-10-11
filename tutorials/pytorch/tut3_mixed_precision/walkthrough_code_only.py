@@ -44,14 +44,12 @@ optimizer_half = True
 stochastic_rounding = True
 
 # Set partials data type to FP16
-partials_half = True
+partials_half = False
 
 model = CustomModel()
 
 if model_half:
     model = model.half()
-
-model.conv1 = model.conv1.half()
 
 transform_list = [transforms.Resize(128),
                   transforms.ToTensor(),
@@ -92,8 +90,9 @@ train_dataloader = poptorch.DataLoader(opts,
                                        train_dataset,
                                        batch_size=12,
                                        shuffle=True,
-                                       num_workers=4)
+                                       num_workers=40)
 
+model.train()
 poptorch_model = poptorch.trainingModel(model,
                                         options=opts,
                                         optimizer=optimizer)
@@ -106,13 +105,14 @@ for epoch in tqdm(range(epochs), desc="epochs"):
         total_loss += loss
 
 poptorch_model.detachFromDevice()
+train_dataloader.terminate()
 
 model.eval()
 poptorch_model_inf = poptorch.inferenceModel(model, options=opts)
 test_dataloader = poptorch.DataLoader(opts,
                                       test_dataset,
                                       batch_size=32,
-                                      num_workers=4)
+                                      num_workers=40)
 
 predictions, labels = [], []
 for data, label in test_dataloader:
@@ -120,6 +120,7 @@ for data, label in test_dataloader:
     labels += label
 
 poptorch_model_inf.detachFromDevice()
+test_dataloader.terminate()
 
 print(f"""Eval accuracy on IPU: {100 *
                 (1 - torch.count_nonzero(torch.sub(torch.tensor(labels),

@@ -10,7 +10,7 @@ Mk2).
 """
 """
 Requirements:
-- an installed Poplar SDK. See the Getting Started guide for your IPU hardware 
+- an installed Poplar SDK. See the Getting Started guide for your IPU system 
 for details of how to install the SDK;
 - Other Python modules: `pip install -r requirements.txt`
 """
@@ -89,7 +89,8 @@ networks with FP16 weights. The instructions to enable it in PopTorch are
 presented later in this tutorial.
 """
 """
-Import the packages
+# Train a model in half precision
+## Import the packages
 """
 import torch
 import torch.nn as nn
@@ -136,7 +137,7 @@ class CustomModel(nn.Module):
 >`model.train()` to switch it back to True.
 """
 """
-Choose parameters. 
+## Choose parameters. 
 """
 """
 >**NOTE** If you wish to modify these parameters for educational purposes, 
@@ -156,7 +157,7 @@ optimizer_half = True
 stochastic_rounding = True
 
 # Set partials data type to FP16
-partials_half = True
+partials_half = False
 """
 ### Casting a model's parameters
 
@@ -181,9 +182,9 @@ offer features to alleviate those issues, it is still sensible for those
 models to cast only the parameters of certain layers and observe how it 
 affects the overall training job. To downcast the parameters of a single 
 layer, we select the layer by its _name_ and use `half()`:
-"""
+```python
 model.conv1 = model.conv1.half()
-"""
+```
 If you would like to upcast a layer instead, you can use `model.conv1.float()`.
 >**NOTE**: One can print out a list of the components of a PyTorch model, 
 >with their names, by doing `print(model)`.
@@ -255,7 +256,7 @@ a hyperparameter for you to tune.
 To configure some features of the IPU and to be able to use PopTorch's classes 
 in the next sections, we will need to create an instance of `poptorch.Options` 
 which stores the options we will be using. We covered some of the available 
-options in: [introductory tutorial for PopTorch](https://github.com/graphcore/examples/tree/master/tutorials/pytorch/tut1_basics).
+options in the: [Introductory Tutorial for PopTorch](https://github.com/graphcore/examples/tree/master/tutorials/pytorch/tut1_basics).
 
 Let's initialise our options object before we talk about the options 
 we will use:
@@ -310,11 +311,12 @@ train_dataloader = poptorch.DataLoader(opts,
                                        train_dataset,
                                        batch_size=12,
                                        shuffle=True,
-                                       num_workers=4)
+                                       num_workers=40)
 """
 We first make sure our model is in training mode, and then wrap it 
 with `poptorch.trainingModel`.
 """
+model.train()
 poptorch_model = poptorch.trainingModel(model,
                                         options=opts,
                                         optimizer=optimizer)
@@ -329,9 +331,10 @@ for epoch in tqdm(range(epochs), desc="epochs"):
         total_loss += loss
 # sst_hide_output
 """
-Release IPU resources:
+Release resources:
 """
 poptorch_model.detachFromDevice()
+train_dataloader.terminate()
 """
 Our new model is now trained and we can start its evaluation.
 """
@@ -347,7 +350,7 @@ poptorch_model_inf = poptorch.inferenceModel(model, options=opts)
 test_dataloader = poptorch.DataLoader(opts,
                                       test_dataset,
                                       batch_size=32,
-                                      num_workers=4)
+                                      num_workers=40)
 """
 Run inference on the labelled data
 """
@@ -357,15 +360,17 @@ for data, label in test_dataloader:
     labels += label
 # sst_hide_output
 """
-Release IPU resources:
+Release resources:
 """
 poptorch_model_inf.detachFromDevice()
+test_dataloader.terminate()
 """
 We obtained an accuracy of approximately 84% on the test dataset.
 """
 print(f"""Eval accuracy on IPU: {100 *
                 (1 - torch.count_nonzero(torch.sub(torch.tensor(labels),
                 torch.tensor(predictions))) / len(labels)):.2f}%""")
+# sst_hide_output
 """
 # Visualise the memory footprint
 

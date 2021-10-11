@@ -62,8 +62,9 @@ def create_pipeline_model(
         multi_activations_outfeed_queue,
         gradient_accumulation_steps_per_replica
 ):
-
-    input_layer = keras.layers.Input(shape=(28, 28, 1), dtype=tf.float32, batch_size=32)
+    input_layer = keras.layers.Input(shape=(28, 28, 1),
+                                     dtype=tf.float32,
+                                     batch_size=32)
 
     with ipu.keras.PipelineStage(0):
         x = keras.layers.Flatten()(input_layer)
@@ -79,7 +80,8 @@ def create_pipeline_model(
                                         final_outfeed=True,
                                         name="Dense_10_acts")(x)
     model = keras.Model(input_layer, x)
-    model.set_pipelining_options(gradient_accumulation_steps_per_replica = gradient_accumulation_steps_per_replica)
+    model.set_pipelining_options(gradient_accumulation_steps_per_replica=
+                                 gradient_accumulation_steps_per_replica)
     return model
 
 def create_sequential_model(
@@ -175,44 +177,61 @@ def process_filters(filters_input):
     return filters_input
 
 def instantiate_selected_model_type(
-        callbacks,
         gradient_accumulation_steps_per_replica,
-        multi_layer_outfeed_callback,
-        layer_outfeed_callback
+        no_pipelining,
+        use_gradient_accumulation,
+        model_type,
+        gradients_filters,
+        activations_filters
 ):
+    # Create the outfeed queue for selected gradients.
+    # Remove the filters to get the gradients for all layers or pass different
+    # strings to the argument to select other layer(s)
+    optimizer_q = MaybeOutfeedQueue(filters=process_filters(gradients_filters))
+
+    # Create a callback for the gradients.
+    gradients_cb = OutfeedCallback(optimizer_q, name="Gradients callback")
+
+    # Create callbacks for the activations in the custom layers.
+    activations_q = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
+    layer_cb = OutfeedCallback(activations_q,
+                               name="Single layer activations callback")
+
+    multi_activations_q = MaybeOutfeedQueue(filters=process_filters(
+                                                      activations_filters))
+    multi_layer_cb = OutfeedCallback(multi_activations_q,
+                                     name="Multi-layer activations callback")
+
+    callbacks = [gradients_cb]
+
     model = None
     if not no_pipelining:
         if model_type == REGULAR_MODEL:
             model = create_pipeline_model(
-                multi_activations_outfeed_queue,
-                gradient_accumulation_steps_per_replica
+                multi_activations_q, gradient_accumulation_steps_per_replica
             )
-            callbacks += [multi_layer_outfeed_callback]
         elif model_type == SEQUENTIAL_MODEL:
             model = create_pipeline_sequential_model(
-                multi_activations_outfeed_queue,
-                gradient_accumulation_steps_per_replica
+                multi_activations_q, gradient_accumulation_steps_per_replica
             )
-            callbacks += [multi_layer_outfeed_callback]
+        callbacks += [multi_layer_cb]
     else:
-        if use_gradient_accumulation:
-            gradient_accumulation_steps_per_replica = \
-                gradient_accumulation_steps_per_replica
-        else:
+        if not use_gradient_accumulation:
             gradient_accumulation_steps_per_replica = 1
+
         if model_type == SEQUENTIAL_MODEL:
             model = create_sequential_model(
-                activations_outfeed_queue,
-                gradient_accumulation_steps_per_replica
+                activations_q, gradient_accumulation_steps_per_replica
             )
-            callbacks += [layer_outfeed_callback]
         elif model_type == REGULAR_MODEL:
-            model = create_model(activations_outfeed_queue,
+            model = create_model(activations_q,
                                  gradient_accumulation_steps_per_replica)
-            callbacks += [layer_outfeed_callback]
+        callbacks += [layer_cb]
+
     if not model:
         raise Exception("Please select proper model_type!")
-    return model, callbacks
+
+    return model, callbacks, optimizer_q
 
 cfg = ipu.config.IPUConfig()
 cfg.auto_select_ipus = num_ipus
@@ -220,73 +239,32 @@ cfg.configure_ipu_system()
 
 strategy = ipu.ipu_strategy.IPUStrategy()
 
-def create_callbacks(
-        activations_outfeed_queue,
-        multi_activations_outfeed_queue
-):
-    # Create a callback for the gradients
-    gradients_outfeed_callback = OutfeedCallback(
-        optimizer_outfeed_queue,
-        name="Gradients callback"
-    )
-    # Create callbacks for the activations in the custom layers
-    layer_outfeed_callback = OutfeedCallback(
-        activations_outfeed_queue,
-        name="Single layer activations callback"
-    )
-    multi_layer_outfeed_callback = OutfeedCallback(
-        multi_activations_outfeed_queue,
-        name="Multi-layer activations callback"
-    )
-    return gradients_outfeed_callback, \
-           layer_outfeed_callback, \
-           multi_layer_outfeed_callback
-
 with strategy.scope():
-    # Create the outfeed queue for selected gradients
-    optimizer_outfeed_queue = MaybeOutfeedQueue(
-            filters=process_filters(gradients_filters)
-    )
-    # Remove the filters to get the gradients for all layers
-    # or pass different strings to the argument to select other layer(s)
-
-    # Create the outfeed queues for the custom layers
-    activations_outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
-    multi_activations_outfeed_queue = MaybeOutfeedQueue(
-            filters=process_filters(activations_filters)
-    )
-
-    gradients_outfeed_callback, \
-        multi_layer_outfeed_callback, \
-        layer_outfeed_callback = \
-        create_callbacks(
-            activations_outfeed_queue,
-            multi_activations_outfeed_queue
+    model, callbacks, optimizer_outfeed_queue = \
+        instantiate_selected_model_type(
+            gradient_accumulation_steps_per_replica=
+            gradient_accumulation_steps_per_replica,
+            no_pipelining=no_pipelining,
+            use_gradient_accumulation=use_gradient_accumulation,
+            model_type=model_type,
+            gradients_filters=gradients_filters,
+            activations_filters=activations_filters
         )
 
-    model, callbacks = instantiate_selected_model_type(
-        callbacks=[gradients_outfeed_callback],
-        gradient_accumulation_steps_per_replica=
-        gradient_accumulation_steps_per_replica,
-        multi_layer_outfeed_callback=multi_layer_outfeed_callback,
-        layer_outfeed_callback=layer_outfeed_callback
-    )
-
-    # Build the graph,
-    # passing an OutfeedOptimizer to enqueue selected gradients
+    # Build the graph passing an OutfeedOptimizer to enqueue selected gradients
     model.compile(
         loss=keras.losses.SparseCategoricalCrossentropy(),
         optimizer=OutfeedOptimizer(
-            keras.optimizers.SGD(),
-            optimizer_outfeed_queue,
+            wrapped_optimizer=keras.optimizers.SGD(),
+            outfeed_queue=optimizer_outfeed_queue,
             outfeed_optimizer_mode=outfeed_optimizer_mode,
             model=model
         ),
         steps_per_execution=steps_per_epoch
     )
 
-    # Train the model, passing the callbacks to see
-    # the gradients and activations stats
+    # Train the model passing the callbacks to see the gradients
+    # and activations stats
     model.fit(
         create_dataset(),
         callbacks=callbacks,

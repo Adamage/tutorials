@@ -326,8 +326,7 @@ train_dataloader = poptorch.DataLoader(opts,
                                        train_dataset,
                                        batch_size=12,
                                        shuffle=True,
-                                       num_workers=40,
-                                       mode=poptorch.DataLoaderMode.Async)
+                                       num_workers=40)
 ```
 
 We first make sure our model is in training mode, and then wrap it 
@@ -353,19 +352,11 @@ for epoch in tqdm(range(epochs), desc="epochs"):
         total_loss += loss
 ```
 
-Release resources - detach IPU devices and also execute method `terminate` 
-of the `DataLoader` instance to fully terminate all worker threads.
-
-The need for terminating the workers manually arises from the fact that we use
-here the Asynchronous Data Loader `DataLoaderMode.Async` and that the data
-sample count is not exactly divisible by the resulting number of multiplied
-batch size and device count, leaving some workers waiting for their turn which
-might not happen due to training ending first before all samples are exhausted.
+Release IPU resources.
 
 
 ```python
 poptorch_model.detachFromDevice()
-train_dataloader.terminate()
 ```
 
 Our new model is now trained and we can start its evaluation.
@@ -401,7 +392,6 @@ Release resources:
 
 ```python
 poptorch_model_inf.detachFromDevice()
-test_dataloader.terminate()
 ```
 
 We obtained an accuracy of approximately 84% on the test dataset.

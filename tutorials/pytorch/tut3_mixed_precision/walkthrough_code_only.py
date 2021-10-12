@@ -90,8 +90,7 @@ train_dataloader = poptorch.DataLoader(opts,
                                        train_dataset,
                                        batch_size=12,
                                        shuffle=True,
-                                       num_workers=40,
-                                       mode=poptorch.DataLoaderMode.Async)
+                                       num_workers=40)
 
 model.train()
 poptorch_model = poptorch.trainingModel(model,
@@ -106,7 +105,6 @@ for epoch in tqdm(range(epochs), desc="epochs"):
         total_loss += loss
 
 poptorch_model.detachFromDevice()
-train_dataloader.terminate()
 
 model.eval()
 poptorch_model_inf = poptorch.inferenceModel(model, options=opts)
@@ -121,7 +119,6 @@ for data, label in test_dataloader:
     labels += label
 
 poptorch_model_inf.detachFromDevice()
-test_dataloader.terminate()
 
 print(f"""Eval accuracy on IPU: {100 *
                 (1 - torch.count_nonzero(torch.sub(torch.tensor(labels),

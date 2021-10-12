@@ -102,16 +102,18 @@ if __name__ == '__main__':
     training_model.compile(data, labels)
 
     print("Evaluating: ", steps, "steps of ", device_iterations*bs*replicas, " items")
-    t0 = time.time()
     if args.synthetic_data:
         # With synthetic data enabled, no data is copied from the host to the IPU, so we don't use
         # the dataloader, to prevent influencing the execution time and therefore the IPU throughput calculation
+        t0 = time.time()
         for _ in range(steps):
             training_model(data, labels)
+        t1 = time.time()
     else:
+        t0 = time.time()
         for data, labels in training_data:
             training_model(data, labels)
-    t1 = time.time()
+        t1 = time.time()
     total_time = t1-t0
     print("Total execution Time:", total_time, "s")
     print("IPU throughput:", (steps*device_iterations*bs*replicas)/total_time, "items/s")

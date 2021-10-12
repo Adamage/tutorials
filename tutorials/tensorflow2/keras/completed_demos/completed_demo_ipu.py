@@ -89,6 +89,7 @@ with strategy.scope():
     model.summary()
     print('\nTraining')
     model.fit(x_train, y_train, epochs=3, batch_size=batch_size)
+    model.compile('sgd', 'categorical_crossentropy', metrics=["accuracy"])
     print('\nEvaluation')
     model.evaluate(x_test, y_test, batch_size=batch_size)
 

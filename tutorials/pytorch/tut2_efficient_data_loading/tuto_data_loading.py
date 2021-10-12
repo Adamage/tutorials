@@ -105,7 +105,6 @@ if __name__ == '__main__':
     if args.synthetic_data:
         # With synthetic data enabled, no data is copied from the host to the IPU, so we don't use
         # the dataloader, to prevent influencing the execution time and therefore the IPU throughput calculation
-        
         t0 = time.time()
         for _ in range(steps):
             training_model(data, labels)

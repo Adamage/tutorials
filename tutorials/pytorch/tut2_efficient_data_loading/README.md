@@ -251,7 +251,6 @@ its maximum throughput.
 
 ```python
 steps = len(training_data)
-print(steps)
 with catchtime() as t:
     for i, (data, labels) in enumerate(training_data):
         a, b = data, labels
@@ -263,9 +262,8 @@ print(f"DataLoader throughput: {items_per_second:.2f} items/s")
 training_data.terminate()
 ```
 
-    12
-    Total execution time: 0.20 s
-    DataLoader throughput: 49078.31 items/s
+    Total execution time: 0.24 s
+    DataLoader throughput: 40836.33 items/s
 
 
 >***Note for release of resources***:
@@ -349,7 +347,7 @@ training_data.terminate()
 
     Evaluating: 12 steps of 800 items
     Total execution time: 0.28 s
-    IPU throughput: 34114.85 items/s
+    IPU throughput: 33824.89 items/s
 
 
 ### What if the DataLoader throughput is too low?
@@ -382,7 +380,7 @@ to be passed to the DataLoader via the dictionary `async_options`:
 ```python
 training_data = poptorch.DataLoader(opts, dataset=dataset, batch_size=16, 
                                     shuffle=True, drop_last=True,
-                                    num_workers=8, mode=poptorch.DataLoaderMode.Async,
+                                    num_workers=4, mode=poptorch.DataLoaderMode.Async,
                                     async_options={"early_preload": True, "miss_sleep_time_in_ms": 0})
 ```
 
@@ -491,10 +489,10 @@ validate_model_performance(dataset, batch_size=16, replicas=1,
                            synthetic_data=True)
 ```
 
-    DataLoader: 48710.09 items/s
+    DataLoader: 47270.36 items/s
 
 
-    IPU throughput: 33957.62 items/s
+    IPU throughput: 34384.12 items/s
 
 
 => Global batch size 16 with real data
@@ -506,11 +504,16 @@ validate_model_performance(dataset, batch_size=16, replicas=1,
                            synthetic_data=False)
 ```
 
-    DataLoader: 52172.69 items/s
+    DataLoader: 43978.03 items/s
 
 
-    IPU throughput: 24000.18 items/s
+    IPU throughput: 20952.14 items/s
 
+
+From the tests you should be able to see that the throughput with processing 
+the model is less than the capabilities of the Dataloader. This means that 
+dataloader is not a bottlneck because, it is able to process more data than 
+our model can consume.
 
 ***Why is the throughput lower with real data?***  
 As mentioned previously, using synthetic data does not include the stream 
@@ -525,7 +528,7 @@ at a time on a single IPU.
 - mini-batch size: 16
 - replica: 4
 - device iterations: 50
-- workers: 8
+- workers: 4
 
 => Global batch size 64 with synthetic data
 
@@ -536,8 +539,8 @@ validate_model_performance(dataset, batch_size=16, replicas=4,
                            synthetic_data=True)
 ```
 
-    DataLoader: 2372176.18 items/s
-    IPU throughput: 134619.34 items/s
+    DataLoader: 3338472.63 items/s
+    IPU throughput: 135660.71 items/s
 
 
 => Global batch size 64 with real data
@@ -549,10 +552,10 @@ validate_model_performance(dataset, batch_size=16, replicas=4,
                            synthetic_data=False)
 ```
 
-    DataLoader: 110408.20 items/s
+    DataLoader: 2451316.11 items/s
 
 
-    IPU throughput: 34532.66 items/s
+    IPU throughput: 36072.34 items/s
 
 
 This example gave an idea of how increasing the global batch size can improve 

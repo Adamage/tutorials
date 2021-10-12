@@ -257,7 +257,6 @@ We just loop through the DataLoader without running the model so we can estimate
 its maximum throughput.
 """
 steps = len(training_data)
-print(steps)
 with catchtime() as t:
     for i, (data, labels) in enumerate(training_data):
         a, b = data, labels
@@ -374,7 +373,7 @@ to be passed to the DataLoader via the dictionary `async_options`:
 ```python
 training_data = poptorch.DataLoader(opts, dataset=dataset, batch_size=16, 
                                     shuffle=True, drop_last=True,
-                                    num_workers=8, mode=poptorch.DataLoaderMode.Async,
+                                    num_workers=4, mode=poptorch.DataLoaderMode.Async,
                                     async_options={"early_preload": True, "miss_sleep_time_in_ms": 0})
 ```
 """
@@ -498,6 +497,10 @@ validate_model_performance(dataset, batch_size=16, replicas=1,
                            synthetic_data=False)
 
 """
+From the tests you should be able to see that the throughput with processing 
+the model is less than the capabilities of the Dataloader. This means that 
+dataloader is not a bottlneck because, it is able to process more data than 
+our model can consume.
 
 ***Why is the throughput lower with real data?***  
 As mentioned previously, using synthetic data does not include the stream 
@@ -514,7 +517,7 @@ at a time on a single IPU.
 - mini-batch size: 16
 - replica: 4
 - device iterations: 50
-- workers: 8
+- workers: 4
 
 => Global batch size 64 with synthetic data
 """

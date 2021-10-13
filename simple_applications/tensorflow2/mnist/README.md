@@ -5,10 +5,10 @@ the MNIST numeral data set.
 
 #### Prerequisites
 
-Before we start the implementation, we need to prepare an IPU compatible 
-TensorFlow 2 environment. First install the Poplar SDK. Make sure to run the 
-`enable.sh` script for Poplar and activate a Python virtualenv with the 
-TensorFlow 2 wheel from the Poplar SDK installed.
+Install the Poplar SDK following the instructions in the [Getting Started guide
+for your IPU system](https://docs.graphcore.ai/en/latest/getting-started.html).
+Make sure to run the `enable.sh` scripts for Poplar and PopART, activate a 
+Python3 virtualenv, and install the TensorFlow 2 wheel from the Poplar SDK.
 
 Let's validate the installation, import the libraries and check the tensorflow 
 version:

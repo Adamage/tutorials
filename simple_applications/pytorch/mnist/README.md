@@ -1,15 +1,15 @@
 # PyTorch(PopTorch) MNIST Training Demo
 
 This example demonstrates how to train a network on the MNIST dataset using
-PopTorch.
+PopTorch. To learn more about PopTorch, see our [PyTorch for the IPU: User Guide](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/index.html).
 
 ## How to use this demo
 
 1) Prepare the environment.
 
-Install the Poplar SDK following the instructions in the Getting Started guide 
-for your IPU system. Make sure to run the `enable.sh` scripts for Poplar and 
-PopART and activate a Python virtualenv with PopTorch installed.
+Install the Poplar SDK following the instructions in the [Getting Started](https://docs.graphcore.ai/en/latest/getting-started.html)
+guide for your IPU system. Make sure to run the `enable.sh` scripts for Poplar 
+and PopART and activate a Python3 virtualenv with PopTorch installed.
 
 Then install the package requirements:
 ```bash
@@ -24,8 +24,8 @@ python3 mnist_poptorch.py
 ```
 
 Select your hyperparameters in this cell. If you wish to modify them, re-run
-all cells below it. Further reading [Hyperparameters](https://en.wikipedia.org/wiki/Hyperparameter_(machine_learning))
-Setup parameters for training:
+all cells below it. For further reading on hyperparameters, see [Hyperparameters (machine learning)](https://en.wikipedia.org/wiki/Hyperparameter_(machine_learning))
+Set up parameters for training:
 
 
 ```python
@@ -33,7 +33,7 @@ Setup parameters for training:
 batch_size = 8
 
 # Device iteration - batches per step
-batches_per_step = 50
+device_iterations = 50
 
 # Batch size for testing
 test_batch_size = 80
@@ -62,13 +62,7 @@ Source: [The MNIST Database](http://yann.lecun.com/exdb/mnist/)
 
 
 ```python
-# The following is a workaround for pytorch issue #1938
-from six.moves import urllib
-opener = urllib.request.build_opener()
-opener.addheaders = [("User-agent", "Mozilla/5.0")]
-urllib.request.install_opener(opener)
-
-local_dataset_path = 'mnist_data/'
+local_dataset_path = '~/.torch/datasets'
 
 transform_mnist = torchvision.transforms.Compose(
     [
@@ -86,7 +80,7 @@ training_dataset = torchvision.datasets.MNIST(
 
 training_data = torch.utils.data.DataLoader(
     training_dataset,
-    batch_size=batch_size * batches_per_step,
+    batch_size=batch_size * device_iterations,
     shuffle=True,
     drop_last=True
 )
@@ -106,10 +100,9 @@ test_data = torch.utils.data.DataLoader(
 )
 ```
 
-Let's define the elements of our neural network. First, we create the class
-`Block` which will consist of a simple 2D convolutional layer with pooling and
-a rectified linear unit (ReLU). To see explanation of pooling and ReLU, see:
-[Convolutional Neural Network](https://en.wikipedia.org/wiki/Convolutional_neural_network#Building_blocks)
+Let's define the elements of our neural network. We first create a `Block`
+instance consisting of a 2D convolutional layer with pooling, followed by
+a ReLU activation.
 
 
 ```python
@@ -129,8 +122,7 @@ class Block(nn.Module):
         return x
 ```
 
-Now let's construct the deep neural network with 4 Convolutional layers and
-a [softmax layer](https://en.wikipedia.org/wiki/Softmax_function) at the output.
+Now, let's construct our neural network.
 
 
 ```python
@@ -152,7 +144,6 @@ class Network(nn.Module):
         x = x.view(-1, 1600)
         x = self.layer3_act(self.layer3(x))
         x = self.layer4(self.layer3_dropout(x))
-        x = self.softmax(x)
         return x
 ```
 
@@ -181,13 +172,13 @@ class TrainingModelWithLoss(torch.nn.Module):
         return output, loss
 ```
 
-Let's initiate the neural network from our defined classes.
+Let's initialise the neural network from our defined classes.
 
 
 ```python
 model = Network()
 model_with_loss = TrainingModelWithLoss(model)
-model_opts = poptorch.Options().deviceIterations(batches_per_step)
+model_opts = poptorch.Options().deviceIterations(device_iterations)
 ```
 
 We can check if the model is assembled correctly by printing the string 
@@ -221,8 +212,8 @@ print(model_with_loss)
 
 
 Now we apply the model wrapping function, which will perform a shallow copy
-of the PyTorch model. To perform the machine learning operations, we also
-will use the Stochastic Gradient Descent with no momentum [SGD](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/reference.html#poptorch.optim.SGD).
+of the PyTorch model. To train the model, we also will use the Stochastic 
+Gradient Descent with no momentum [SGD](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/reference.html#poptorch.optim.SGD).
 
 
 ```python
@@ -259,20 +250,13 @@ for epoch in tqdm(range(1, epochs+1), leave=True, desc="Epochs", total=epochs):
     with tqdm(training_data, total=nr_batches, leave=False) as bar:
         for data, labels in bar:
             preds, losses = training_model(data, labels)
-            with torch.inference_mode():
-                mean_loss = torch.mean(losses).item()
-                acc = accuracy(preds, labels)
+
+            mean_loss = torch.mean(losses).item()
+
+            acc = accuracy(preds, labels)
             bar.set_description(
                 "Loss: {:0.4f} | Accuracy: {:05.2F}% ".format(mean_loss, acc)
             )
-```
-
-Update the weights in model by copying from the training IPU. 
-This updates `model.parameters()`.
-
-
-```python
-training_model.copyWeightsToHost()
 ```
 
 Release resources:
@@ -282,9 +266,9 @@ Release resources:
 training_model.detachFromDevice()
 ```
 
-Check validation loss on IPU once trained. Because PopTorch will be compiled 
-on first call the weights in `model.parameters()` will be copied implicitly. 
-Subsequent calls will need to call `inference_model.copyWeightsToDevice()`.
+Let's check the validation loss on IPU using the trained model. The weights 
+in `model.parameters()` will be copied from the IPU to the host. The trained
+model will be reused to compile the new inference model.
 
 
 ```python
@@ -297,11 +281,10 @@ Perform validation
 ```python
 nr_batches = len(test_data)
 sum_acc = 0.0
-with torch.no_grad():
-    with tqdm(test_data, total=nr_batches, leave=False) as bar:
-        for data, labels in bar:
-            output = inference_model(data)
-            sum_acc += accuracy(output, labels)
+with tqdm(test_data, total=nr_batches, leave=False) as bar:
+    for data, labels in bar:
+        output = inference_model(data)
+        sum_acc += accuracy(output, labels)
 ```
 
 Finally the accuracy on the test set is:
@@ -311,7 +294,7 @@ Finally the accuracy on the test set is:
 print("Accuracy on test set: {:0.2f}%".format(sum_acc / len(test_data)))
 ```
 
-    Accuracy on test set: 97.19%
+    Accuracy on test set: 99.07%
 
 
 Release resources:

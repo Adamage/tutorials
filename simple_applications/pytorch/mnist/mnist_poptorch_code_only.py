@@ -4,7 +4,7 @@
 batch_size = 8
 
 # Device iteration - batches per step
-batches_per_step = 50
+device_iterations = 50
 
 # Batch size for testing
 test_batch_size = 80
@@ -22,13 +22,7 @@ import torchvision
 import poptorch
 import torch.optim as optim
 
-# The following is a workaround for pytorch issue #1938
-from six.moves import urllib
-opener = urllib.request.build_opener()
-opener.addheaders = [("User-agent", "Mozilla/5.0")]
-urllib.request.install_opener(opener)
-
-local_dataset_path = 'mnist_data/'
+local_dataset_path = '~/.torch/datasets'
 
 transform_mnist = torchvision.transforms.Compose(
     [
@@ -46,7 +40,7 @@ training_dataset = torchvision.datasets.MNIST(
 
 training_data = torch.utils.data.DataLoader(
     training_dataset,
-    batch_size=batch_size * batches_per_step,
+    batch_size=batch_size * device_iterations,
     shuffle=True,
     drop_last=True
 )
@@ -98,7 +92,6 @@ class Network(nn.Module):
         x = x.view(-1, 1600)
         x = self.layer3_act(self.layer3(x))
         x = self.layer4(self.layer3_dropout(x))
-        x = self.softmax(x)
         return x
 
 class TrainingModelWithLoss(torch.nn.Module):
@@ -114,7 +107,7 @@ class TrainingModelWithLoss(torch.nn.Module):
 
 model = Network()
 model_with_loss = TrainingModelWithLoss(model)
-model_opts = poptorch.Options().deviceIterations(batches_per_step)
+model_opts = poptorch.Options().deviceIterations(device_iterations)
 
 print(model_with_loss)
 
@@ -137,14 +130,13 @@ for epoch in tqdm(range(1, epochs+1), leave=True, desc="Epochs", total=epochs):
     with tqdm(training_data, total=nr_batches, leave=False) as bar:
         for data, labels in bar:
             preds, losses = training_model(data, labels)
-            with torch.inference_mode():
-                mean_loss = torch.mean(losses).item()
-                acc = accuracy(preds, labels)
+
+            mean_loss = torch.mean(losses).item()
+
+            acc = accuracy(preds, labels)
             bar.set_description(
                 "Loss: {:0.4f} | Accuracy: {:05.2F}% ".format(mean_loss, acc)
             )
-
-training_model.copyWeightsToHost()
 
 training_model.detachFromDevice()
 
@@ -152,11 +144,10 @@ inference_model = poptorch.inferenceModel(model)
 
 nr_batches = len(test_data)
 sum_acc = 0.0
-with torch.no_grad():
-    with tqdm(test_data, total=nr_batches, leave=False) as bar:
-        for data, labels in bar:
-            output = inference_model(data)
-            sum_acc += accuracy(output, labels)
+with tqdm(test_data, total=nr_batches, leave=False) as bar:
+    for data, labels in bar:
+        output = inference_model(data)
+        sum_acc += accuracy(output, labels)
 
 print("Accuracy on test set: {:0.2f}%".format(sum_acc / len(test_data)))
 

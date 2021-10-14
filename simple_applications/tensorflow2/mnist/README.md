@@ -10,7 +10,7 @@ for your IPU system](https://docs.graphcore.ai/en/latest/getting-started.html).
 Make sure to run the `enable.sh` scripts for Poplar and PopART, activate a 
 Python3 virtualenv, and install the TensorFlow 2 wheel from the Poplar SDK.
 
-Let's validate the installation, import the libraries and check the tensorflow 
+Let's validate the installation, import the libraries and check the TensorFlow 
 version:
 
 

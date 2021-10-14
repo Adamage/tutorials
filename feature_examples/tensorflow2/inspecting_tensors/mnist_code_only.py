@@ -9,9 +9,6 @@ from outfeed_optimizer import OutfeedOptimizer, OutfeedOptimizerMode
 import outfeed_layers
 from outfeed_wrapper import MaybeOutfeedQueue
 
-if tf.__version__[0] != '2':
-    raise ImportError("TensorFlow 2 is required for this example")
-
 def create_dataset():
     mnist = keras.datasets.mnist
 
@@ -19,8 +16,8 @@ def create_dataset():
     x_train, x_test = x_train / 255.0, x_test / 255.0
 
     # Add a channels dimension.
-    x_train = x_train[..., tf.newaxis]
-    x_test = x_test[..., tf.newaxis]
+    x_train = tf.expand_dims(x_train, -1)
+    x_test = tf.expand_dims(x_test, -1)
 
     train_ds = tf.data.Dataset \
         .from_tensor_slices((x_train, y_train)) \
@@ -141,8 +138,8 @@ use_gradient_accumulation = True
 # accumulation, which is always the case when pipelining is enabled.
 outfeed_pre_accumulated_gradients = False
 
-# Number of steps to run per epoch.
-steps_per_epoch = 500
+# Number of steps to run per execution.
+steps_per_execution = 500
 
 # Number of epochs
 epochs = 3
@@ -260,7 +257,7 @@ with strategy.scope():
             outfeed_optimizer_mode=outfeed_optimizer_mode,
             model=model
         ),
-        steps_per_execution=steps_per_epoch
+        steps_per_execution=steps_per_execution
     )
 
     # Train the model passing the callbacks to see the gradients
@@ -268,6 +265,6 @@ with strategy.scope():
     model.fit(
         create_dataset(),
         callbacks=callbacks,
-        steps_per_epoch=steps_per_epoch,
+        steps_per_epoch=steps_per_execution,
         epochs=epochs
     )

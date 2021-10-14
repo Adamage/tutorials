@@ -1,20 +1,20 @@
-# Tensorflow 2 tutorial for explaining pipelining and tensor
-# inspection techniques
+# TensorFlow 2: Pipelining and Tensor Inspection Techniques
 
-Trains a choice of simple fully connected models on the MNIST
-numeral data set and shows how tensors (containing activations and gradients)
-can be returned to the host via outfeeds for inspection.
+In this tutorial you will train a selection of simple fully connected models
+on the MNIST numeral data set and see how tensors (containing activations
+and gradients) can be returned to the host via outfeeds for inspection.
 
-This can be useful for debugging but can significantly increase the amount
-of memory required on the IPU(s). When pipelining, use a small value for the
-gradient accumulation count to mitigate this. Consider using a small
-number of steps per epoch. Filters can be used to only return a subset of
-the activations and gradients.
+Outfeeds can be useful for debugging, but can significantly increase the amount
+of memory required on the IPU(s). When pipelining, you could use a smaller
+value for the gradient accumulation count to mitigate this. Also consider using
+a small number of steps per execution to reduce memory footprint. Filters can
+be used to only return a subset of the activations and gradients.
 
-Required imports.
+## Required imports.
 >**Note**
->The Tensorflow 2 distribution you need is bundled with Graphcore Poplar SDK!
->The main difference is that `tensorflow.python` API has `ipu` package.
+>The Graphcore TensorFlow 2 wheel is bundled with Graphcore Poplar SDK. Please
+>ensure you install this wheel rather than the default public wheel, as it 
+>contains IPU specific functionality in the `ipu` submodule.
 
 
 ```python
@@ -28,25 +28,19 @@ import outfeed_layers
 from outfeed_wrapper import MaybeOutfeedQueue
 ```
 
-Ensure proper Tensorflow version is installed.
-
-
-```python
-if tf.__version__[0] != '2':
-    raise ImportError("TensorFlow 2 is required for this example")
-```
-
 ## General approach to code in this tutorial
 
 You will notice that a lot of code has been extracted to functions. This is 
-mainly because most of it has to be executed within a Python context manager
-which has to fit into one cell. To avoid giant Jupyter cells, you will only
-find invocations of functions once the Tensorflow IPU context has been used.
+mainly because when running in a Jupyter notebook most of the code has to be 
+executed in the same Python context manager (which is scoped per cell). To 
+avoid giant Jupyter notebook cells, you will only find invocations of functions
+later once the Tensorflow IPU context has been used.
 
 ## Dataset preparation
 
-Create the helper function to use inside IPU context.
-Dataset containing input data and labels.
+We need to load the dataset and perform some normalization of values. Below
+you will find a helper function to use inside IPU context, which will load
+the input data with labels.
 
 
 ```python
@@ -57,8 +51,8 @@ def create_dataset():
     x_train, x_test = x_train / 255.0, x_test / 255.0
 
     # Add a channels dimension.
-    x_train = x_train[..., tf.newaxis]
-    x_test = x_test[..., tf.newaxis]
+    x_train = tf.expand_dims(x_train, -1)
+    x_test = tf.expand_dims(x_test, -1)
 
     train_ds = tf.data.Dataset \
         .from_tensor_slices((x_train, y_train)) \
@@ -79,7 +73,7 @@ We are going to use Pipeline Stages to assign operations to devices and to
 configure parallelism. Additionally, we will use the functionality of outfeed
 queues for IPUs to outfeed the activations for multiple layers for a specific
 stage.
-More about [outfeed queues](https://docs.graphcore.ai/projects/tensorflow-user-guide/en/latest/perf_training.html#accessing-outfeed-queue-results-during-execution)
+If you're interested you can read more about outfeed queues [here](https://docs.graphcore.ai/projects/tensorflow-user-guide/en/latest/perf_training.html#accessing-outfeed-queue-results-during-execution)
 
 In the following graphics, FWD and BWD refer to forward and backward passes.
 
@@ -139,14 +133,14 @@ over two IPUs. Gradients for one of the layers, and activations for two of
 the layers, are returned for inspection on the host. This can be changed using 
 options.
 
-For the single IPU models (Model and Sequential) gradients and activations are
+For the single IPU models (Model and Sequential), gradients and activations are
 returned for one layer.
 
 >What follows next are helper functions which act as factories for instances
 >of Keras models. After the section where they are defined, there is an option
 >to **choose one of them** for further processing.
 
-## Option 1 - Keras Regular model without pipelining
+## Option 1 - Keras `Functional` model without pipelining
 
 Create the model using the Keras Model class.
 Outfeed the activations for a single layer.
@@ -180,7 +174,7 @@ def create_model(
     return keras_model
 ```
 
-##  Option 2 - Keras Regular model with pipelining for two separate Stages
+##  Option 2 - Keras `Functional` model with pipelining for two separate Stages
 The usage of Pipeline Stages can be found here:
 [pipelined training](https://docs.graphcore.ai/projects/tensorflow-user-guide/en/latest/perf_training.html#pipelined-training)
 
@@ -217,7 +211,7 @@ def create_pipeline_model(
     return model
 ```
 
-##  Option 3 - Keras Sequential model without pipelining
+##  Option 3 - Keras `Sequential model` without pipelining
 
 This function creates the model using the Keras `Sequential` class. This class
 groups a linear stack of layers into a `tf.Keras.Model`. Then, `Sequential`
@@ -245,7 +239,7 @@ def create_sequential_model(
     return model
 ```
 
-##  Option 4 - Keras Sequential model with pipelining
+##  Option 4 - Keras `Sequential model` with pipelining
 
 This function reate the model using the Keras Sequential class. We can pipeline
 the model by assigning layers to stages through 
@@ -283,7 +277,7 @@ def create_pipeline_sequential_model(
     return model
 ```
 
-## Selecting the pipelining feature
+## Configuring pipelining
 
 Choose values for the following variables that hold parameters.
 If you change them for experimentation, re-run all the cells below including
@@ -308,8 +302,8 @@ use_gradient_accumulation = True
 # accumulation, which is always the case when pipelining is enabled.
 outfeed_pre_accumulated_gradients = False
 
-# Number of steps to run per epoch.
-steps_per_epoch = 500
+# Number of steps to run per execution.
+steps_per_execution = 500
 
 # Number of epochs
 epochs = 3
@@ -419,7 +413,7 @@ def instantiate_selected_model_type(
     return model, callbacks, optimizer_q
 ```
 
-Initiate IPU configuration - more details here [`IPUConfig`](https://docs.graphcore.ai/projects/tensorflow-user-guide/en/latest/api.html#tensorflow.python.ipu.config.IPUConfig)
+Initialise IPU configuration - more details here [`IPUConfig`](https://docs.graphcore.ai/projects/tensorflow-user-guide/en/latest/api.html#tensorflow.python.ipu.config.IPUConfig)
 
 
 ```python
@@ -428,7 +422,7 @@ cfg.auto_select_ipus = num_ipus
 cfg.configure_ipu_system()
 ```
 
-## Selecting the Tensorflow IPU distribution strategy
+## Placing and training the model on IPU
 
 If you are using Keras, you must instantiate your Keras model inside of 
 the strategy scope, which is a Python context manager.
@@ -468,7 +462,7 @@ with strategy.scope():
             outfeed_optimizer_mode=outfeed_optimizer_mode,
             model=model
         ),
-        steps_per_execution=steps_per_epoch
+        steps_per_execution=steps_per_execution
     )
 
     # Train the model passing the callbacks to see the gradients
@@ -476,7 +470,7 @@ with strategy.scope():
     model.fit(
         create_dataset(),
         callbacks=callbacks,
-        steps_per_epoch=steps_per_epoch,
+        steps_per_epoch=steps_per_execution,
         epochs=epochs
     )
 ```

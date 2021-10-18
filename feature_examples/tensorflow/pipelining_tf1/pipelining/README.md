@@ -23,9 +23,9 @@ active Python environment before starting the tutorial.
 
 | Filename                               | Description                                                                                    |
 | -------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `README.md`                            | This tutorial in markdown format                                                               |
-| `pipelining.ipynb`                     | This tutorial in Jupyter notebook format                                                       |
-| `pipelining.py`                        | An executable python file that is used as a single source to generate this file                |
+| `README.md`                            | This tutorial in markdown format.                                                              |
+| `pipelining.ipynb`                     | This tutorial in Jupyter notebook format.                                                      |
+| `pipelining.py`                        | An executable python file that is used as a single source to generate this file.               |
 | `step1_single_ipu.py`                  | Step 1 - the existing TensorFlow application that runs **without** pipelining on a single IPU. |
 | `answers/step2_sharding.py`            | Step 2 - shows how to run on multiple IPUs, still **without** pipelining.                      |
 | `answers/step3_pipelining.py`          | Step 3 - shows how to add pipelining.                                                          |
@@ -147,7 +147,7 @@ this will
 
 ### Tutorial Step 1: The Existing Single IPU Application
 
-The code we will start with can also be found [`step1_single_ipu.py`](step1_single_ipu.py).
+The code we will start with can also be found in [`step1_single_ipu.py`](step1_single_ipu.py).
 
 Here is a slightly simplified version of it. Take a look at the code and 
 familiarise yourself with it. 
@@ -178,8 +178,9 @@ Traceback (most recent call last):
 ModuleNotFoundError: No module named 'tensorflow'
 ```
 
-Set hyperparameters, if you want to run the script with different ones remember
-to rerun all cells below.
+Set up the model hyperparameters. If you're reading this in a Jupyter notebook 
+and want to modify any of the hyperparameters, make sure to rerun all of the 
+following cells.
 
 
 ```python
@@ -249,7 +250,7 @@ if remainder > 0:
 examples_per_step = BATCH_SIZE * REPEAT_COUNT
 ```
 
-In order to evaluate at least N total examples, do ceil(N / n) steps.
+In order to evaluate at least N total examples, do `ceil(N / n)` steps.
 
 
 ```python
@@ -263,16 +264,14 @@ print(f'Steps {steps} x examples per step {examples_per_step} '
     Steps 586 x examples per step 5120 (== 3000320 training examples, 50.01 epochs of 60000 examples)
 
 
-Now we will compile the learning rate and create the model .
+Now we define the model and setup a placeholder on the host to vary the 
+learning rate:
 
 
 ```python
 with tf.device('cpu'):
     learning_rate = tf.placeholder(np.float32, [])
-```
 
-
-```python
 def model(learning_rate, images, labels):
     # Receiving images,labels (x BATCH_SIZE) via infeed.
     # The scoping here helps clarify the execution trace when using --profile.
@@ -328,10 +327,10 @@ with ipu.scopes.ipu_scope("/device:IPU:0"):
 outfeed_op = outfeed_queue.dequeue()
 ```
 
-Configure the IPU.  The auto_select_ipus option is used to set the limit of 
-used IPUs. In this example we need only one IPU, however this parameter could 
-be changed in order to obtain data parallelism. If you are interested you can 
-find more information in [documentation](https://docs.graphcore.ai/projects/tensorflow1-user-guide/en/latest/perf_training.html?#selecting-the-number-of-replicas).
+Configure the IPU. The `auto_select_ipus` option is used to automatically 
+select `n` IPUs from the available pool. In this example we need only one IPU, 
+however this parameter could be changed in order to obtain data parallelism. 
+If you are interested you can find more information in our [documentation](https://docs.graphcore.ai/projects/tensorflow1-user-guide/en/latest/perf_training.html?#selecting-the-number-of-replicas).
 
 
 ```python
@@ -343,7 +342,7 @@ ipu_configuration.auto_select_ipus = 1
 ipu_configuration.configure_ipu_system()
 ```
 
-We are ready to start the training process.
+Now we are ready to compile the model again and start the training process.
 
 
 ```python
@@ -379,8 +378,6 @@ The model is running on a single IPU without pipelining. You should see it train
 with output similar to this below:
 
 ```
-$ python3 step1_single_ipu.py
-<CUT>
 Steps 586 x examples per step 5120 (== 3000320 training examples, 50.00 epochs of 60000 examples)
 <CUT>
 Step 0, Epoch 0.0, Mean loss: 2.157
@@ -538,8 +535,6 @@ print("Stage 2 ran successfully")
 You should see it train with output something like this below.
 
 ```
-$ python3 step2_sharding.py
-<CUT>
 Steps 586 x examples per step 5120 (== 3000320 training examples, 50.00 epochs of 60000 examples)
 <CUT>
 Step 0, Epoch 0.0, Mean loss: 2.184
@@ -549,8 +544,8 @@ Step 585, Epoch 49.9, Mean loss: 0.001
 Elapsed <CUT>
 ```
 
-Complete working example also can be found in `answers/step2_sharding.py`,
-you can run the application with the following shell command:
+A complete working example also can be found in `answers/step2_sharding.py`.
+You can run the working example with the following shell command:
 
 `$ python3 step2_sharding.py`
 
@@ -820,7 +815,7 @@ The following shows what this should look like with inset comments:
 
 ```python
 def pipelined_model(learning_rate):
-# Defines a pipelined model which is split accross two stages
+    # Defines a pipelined model which is split accross two stages
 ```
 
 Within `pipelined_model`, we need a definition for 'stage1', that must:
@@ -832,7 +827,7 @@ Within `pipelined_model`, we need a definition for 'stage1', that must:
 - return the results of the final layer.
 
 ```python
-    def stage1(learning_rate, images, labels):
+def stage1(learning_rate, images, labels):
     r = layer1_flatten(learning_rate, images, labels)
     r = layer2_dense256(*r)
     r = layer3_dense128(*r)
@@ -850,7 +845,7 @@ must:
 - return the results of the final layer.
 
 ```python
-    def stage2(*r):
+def stage2(*r):
     r = layer5_dense32(*r)
     r = layer6_logits(*r)
     r = layer7_cel(*r)
@@ -880,17 +875,18 @@ def pipelined_model(learning_rate):
         r = layer7_cel(*r)
         return r
 
-    pipeline_op = ipu.pipelining_ops.pipeline(
-        computational_stages=[stage1, stage2],
-        gradient_accumulation_count=BATCHES_TO_ACCUMULATE,
-        repeat_count=REPEAT_COUNT,
-        inputs=[learning_rate],
-        infeed_queue=infeed_queue,
-        outfeed_queue=outfeed_queue,
-        optimizer_function=optimizer_function,
-        pipeline_schedule=ipu.pipelining_ops.PipelineSchedule.Grouped,
-        outfeed_loss=True,
-        name="Pipeline")
+    with tf.variable_scope("FCModel", use_resource=True):
+        pipeline_op = ipu.pipelining_ops.pipeline(
+            computational_stages=[stage1, stage2],
+            gradient_accumulation_count=BATCHES_TO_ACCUMULATE,
+            repeat_count=REPEAT_COUNT,
+            inputs=[learning_rate],
+            infeed_queue=infeed_queue,
+            outfeed_queue=outfeed_queue,
+            optimizer_function=optimizer_function,
+            pipeline_schedule=ipu.pipelining_ops.PipelineSchedule.Grouped,
+            outfeed_loss=True,
+            name="Pipeline")
     return pipeline_op
 ```
 
@@ -922,7 +918,7 @@ Notes:
   application, `learning rate` is effectively static and could be removed and
   hardcoded.
   
-Moreover, we will update step calculation. The pipeline API encapsulates the 
+Next we will update the step calculation. The pipeline API encapsulates the 
 repeat count and gradient accumulation count.
 With gradient accumulation count `BATCHES_TO_ACCUMULATE` and repeat count 
 `REPEAT_COUNT`, each session.run() will process 
@@ -1012,8 +1008,6 @@ print("Stage 3 ran successfully")
 You should see it train with output something like this below.
 
 ```
-$ python3 step3_pipelining.py
-<CUT>
 Steps 586 x examples per step 5120 (== 3000320 training examples, 50.00 epochs of 60000 examples)
 <CUT>
 Step 0, Epoch 0.0, Mean loss: 2.174
@@ -1081,7 +1075,7 @@ running on the IPU and minimise interactions with the host.
 #### Tutorial Step 3 : Extension
 We encourage you to test the training script more deeply using different 
 parameters. You can do this by modifying the parameters in the notebook and 
-running the appropriate cell, but an error-free approach would be to use the 
+running the appropriate cell, but a simpler approach would be to use the 
 full script for training step 3 located in: [`answers/step3_pipelining.py`](answers/step3_pipelining.py).
 
 ##### Pipeline Schedule
@@ -1102,9 +1096,6 @@ Try modifying the layers assigned to each stage.
 Try splitting the layers up over more stages.  
 Recapture the profile reports and see how the execution trace changes in each
 case compared to the original version.
-
-The code changes for this step can be found
-here: [`answers/step3_pipelining.py`](answers/step3_pipelining.py)
 
 ### Tutorial Step 4: Run-time Configurable Stages
 
@@ -1254,7 +1245,7 @@ computational_stages = computational_stages
 
 ```
 
-Complete, updated `pipelined_model` looks like that:
+Complete, updated `pipelined_model` looks like this:
 
 
 ```python
@@ -1405,8 +1396,6 @@ print("Stage 4 ran successfully")
 You should see it train with output something like this below.
 
 ```
-$ python3 step4_configurable_stages.py
-<CUT>
 Layers:
  flatten, dense256, dense128, dense64, dense32, logits, cel
 Stages:

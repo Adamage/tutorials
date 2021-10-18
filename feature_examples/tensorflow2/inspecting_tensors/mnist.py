@@ -1,20 +1,29 @@
-# Copyright (c) 2020 Graphcore Ltd. All rights reserved.
-
 """
-# TensorFlow 2: Pipelining and Tensor Inspection Techniques
+Copyright (c) 2020 Graphcore Ltd. All rights reserved.
+"""
+"""
+# TensorFlow 2: Tensor Inspection Techniques
 
 In this tutorial you will train a selection of simple fully connected models
 on the MNIST numeral data set and see how tensors (containing activations
 and gradients) can be returned to the host via outfeeds for inspection.
 
+An outfeed is the counterpart to an infeed and manages the transfer of data 
+(like tensors, tuples or dictionaries of tensors) from the IPU graph to 
+the host. Too learn more about using feeds, see [outfeed queues](https://docs.graphcore.ai/projects/tensorflow-user-guide/en/latest/api.html#outfeed-queue).
+
 Outfeeds can be useful for debugging, but can significantly increase the amount
 of memory required on the IPU(s). When pipelining, you could use a smaller
 value for the gradient accumulation count to mitigate this. Also consider using
-a small number of steps per execution to reduce memory footprint. Filters can
-be used to only return a subset of the activations and gradients.
+a small number of steps per execution to reduce memory footprint. 
+
+In this demo, filters can be used to return only a subset of the activations
+and gradients. The outfed information can be returned to a variable or can be
+printed to the standard output. In [`outfeed_callback.py`](./outfeed_callback.py)
+the implementation is to print this information to the standard output.
 """
 """
-## Required imports.
+## Required imports
 >**Note**
 >The Graphcore TensorFlow 2 wheel is bundled with Graphcore Poplar SDK. Please
 >ensure you install this wheel rather than the default public wheel, as it 
@@ -63,35 +72,6 @@ def create_dataset():
         lambda d, l: (tf.cast(d, tf.float32), tf.cast(l, tf.float32))
     )
     return train_ds
-""" 
-## Pipelining features
-
-In this tutorial, we will create models using the Keras Model class and IPU 
-pipelining features.
-We are going to use Pipeline Stages to assign operations to devices and to
-configure parallelism. Additionally, we will use the functionality of outfeed
-queues for IPUs to outfeed the activations for multiple layers for a specific
-stage.
-If you're interested you can read more about outfeed queues [here](https://docs.graphcore.ai/projects/tensorflow-user-guide/en/latest/perf_training.html#accessing-outfeed-queue-results-during-execution)
-
-In the following graphics, FWD and BWD refer to forward and backward passes.
-
-The computational stages can be interleaved on the devices in three different 
-ways as described by the `pipeline_schedule` parameter. By default the API 
-will use the `PipelineSchedule.Grouped` mode, where the forward passes are 
-grouped together, and the backward passes are grouped together. 
-![Grouped pipeline](static/grouped_pipeline.png)
-
-The main alternative is the `PipelineSchedule.Interleaved` mode, where the 
-forward and backward passes are interleaved, so that fewer activations need 
-to be stored. 
-![Interleaved pipeline](static/interleaved_pipeline.png)
-
-Additionally, the `PipelineSchedule.Sequential` mode, where the pipeline is 
-scheduled in the same way as if it were a sharded model, may be useful when 
-debugging your model.
-![Sharded pipeline](static/sharded_pipeline.png)
-"""
 """
 ## File structure and local imports
 
@@ -135,121 +115,15 @@ over two IPUs. Gradients for one of the layers, and activations for two of
 the layers, are returned for inspection on the host. This can be changed using 
 options.
 
-For the single IPU models (Model and Sequential), gradients and activations are
-returned for one layer.
-
->What follows next are helper functions which act as factories for instances
->of Keras models. After the section where they are defined, there is an option
->to **choose one of them** for further processing.
+The gradient accumulation count `gradient_accumulation_steps_per_replica`
+determines the pipeline depth, so the number of activations and gradients 
+added to the outfeed queues will be proportional to the gradient accumulation 
+value. Additionally, the outfeed callback is called at the end of the epoch, 
+so the number of steps per epoch will also affect the amount of data 
+in the queues.
 """
-""" 
-## Option 1 - Keras `Functional` model without pipelining
-
-Create the model using the Keras Model class.
-Outfeed the activations for a single layer.
-"""
-def create_model(
-        activations_outfeed_queue,
-        gradient_accumulation_steps_per_replica
-):
-    input_layer = keras.layers.Input(
-        shape=(28, 28, 1),
-        dtype=tf.float32,
-        batch_size=32
-    )
-    x = keras.layers.Flatten()(input_layer)
-    x = keras.layers.Dense(128, activation='relu', name="Dense_128")(x)
-
-    # Outfeed the activations for a single layer:
-    x = outfeed_layers.Outfeed(
-        activations_outfeed_queue,
-        name="Dense_128_acts")(x)
-
-    x = keras.layers.Dense(10, activation='softmax',  name="Dense_10")(x)
-
-    keras_model = keras.Model(input_layer, x)
-    keras_model.set_gradient_accumulation_options(
-        gradient_accumulation_steps_per_replica=
-        gradient_accumulation_steps_per_replica
-    )
-    return keras_model
-"""
-##  Option 2 - Keras `Functional` model with pipelining for two separate Stages
-The usage of Pipeline Stages can be found here:
-[pipelined training](https://docs.graphcore.ai/projects/tensorflow-user-guide/en/latest/perf_training.html#pipelined-training)
-
-To pipeline a `Functional` model you are writing yourself, each layer call must
-happen within the scope of an `ipu.keras.PipelineStage` context.
-In the function below, we assign layers to two different stages.
-"""
-def create_pipeline_model(
-        multi_activations_outfeed_queue,
-        gradient_accumulation_steps_per_replica
-):
-    input_layer = keras.layers.Input(shape=(28, 28, 1),
-                                     dtype=tf.float32,
-                                     batch_size=32)
-
-    with ipu.keras.PipelineStage(0):
-        x = keras.layers.Flatten()(input_layer)
-        x = keras.layers.Dense(256, activation='relu', name="Dense_256")(x)
-
-    with ipu.keras.PipelineStage(1):
-        x = keras.layers.Dense(128, activation='relu', name="Dense_128")(x)
-        x = outfeed_layers.MaybeOutfeed(multi_activations_outfeed_queue,
-                                        final_outfeed=False,
-                                        name="Dense_128_acts")(x)
-        x = keras.layers.Dense(10, activation='softmax',  name="Dense_10")(x)
-        x = outfeed_layers.MaybeOutfeed(multi_activations_outfeed_queue,
-                                        final_outfeed=True,
-                                        name="Dense_10_acts")(x)
-    model = keras.Model(input_layer, x)
-    model.set_pipelining_options(gradient_accumulation_steps_per_replica=
-                                 gradient_accumulation_steps_per_replica)
-    return model
-"""
-##  Option 3 - Keras `Sequential model` without pipelining
-
-This function creates the model using the Keras `Sequential` class. This class
-groups a linear stack of layers into a `tf.Keras.Model`. Then, `Sequential`
-provides training and inference features on this model.
- 
-We outfeed the activations for a single layer.
-"""
-def create_sequential_model(
-        activations_outfeed_queue,
-        gradient_accumulation_steps_per_replica
-):
-    model = keras.Sequential([
-        keras.layers.Flatten(),
-        keras.layers.Dense(128, activation='relu', name="Dense_128"),
-        outfeed_layers.Outfeed(activations_outfeed_queue, name="Dense_128_acts"),
-        keras.layers.Dense(10, activation='softmax', name="Dense_10")
-    ])
-    model\
-        .set_gradient_accumulation_options(
-          gradient_accumulation_steps_per_replica=
-          gradient_accumulation_steps_per_replica
-        )
-    return model
-"""
-##  Option 4 - Keras `Sequential model` with pipelining
-
-This function reate the model using the Keras Sequential class. We can pipeline
-the model by assigning layers to stages through 
-`set_pipeline_stage_assignment`. We outfeed the activations for multiple 
-layers in the second stage.
-
-Below you will see pipeline stage assignment like this:
-`model.set_pipeline_stage_assignment([0, 0, 1, 1, 1, 1])`
-which means that first two layers of `Sequential` model are assigned to
-the first stage, and the remaining four layers to the second stage.
-"""
-def create_pipeline_sequential_model(
-        multi_activations_outfeed_queue,
-        gradient_accumulation_steps_per_replica
-):
-    model = keras.Sequential([
+def create_pipeline_sequential_model(multi_activations_outfeed_queue):
+    seq_model = keras.Sequential([
         keras.layers.Flatten(),
         keras.layers.Dense(256, activation='relu', name="Dense_256"),
         keras.layers.Dense(128, activation='relu', name="Dense_128"),
@@ -261,38 +135,29 @@ def create_pipeline_sequential_model(
                                     final_outfeed=True,
                                     name="Dense_10_acts")
     ])
-    model.set_pipelining_options(
-        gradient_accumulation_steps_per_replica=
-        gradient_accumulation_steps_per_replica
-    )
-    model.set_pipeline_stage_assignment([0, 0, 1, 1, 1, 1])
-    return model
+    seq_model.set_pipelining_options(gradient_accumulation_steps_per_replica=4)
+    seq_model.set_pipeline_stage_assignment([0, 0, 1, 1, 1, 1])
+    return seq_model
 """
-## Configuring pipelining
+## Configuring the demo
 
 Choose values for the following variables that hold parameters.
 If you change them for experimentation, re-run all the cells below including
 this one.
 """
-# Model Type can be "Model" or "Sequential"
-SEQUENTIAL_MODEL = "Sequential"
-REGULAR_MODEL = "Model"
-model_type = SEQUENTIAL_MODEL
-
-# [boolean] Should IPU pipelining be disabled?
-no_pipelining = False
-
-# [boolean] Should gradient accumulation be enabled? It's always enabled
-# for pipelined models.
-use_gradient_accumulation = True
-
 # [boolean] Should the code outfeed the pre-accumulated gradients, rather than
 # accumulated gradients? Only makes a difference when using gradient
 # accumulation, which is always the case when pipelining is enabled.
 outfeed_pre_accumulated_gradients = False
 
-# Number of steps to run per execution.
+# Number of steps to run per execution. The number of batches to run for
+# each TensorFlow function call. At most it would execute a full epoch.
 steps_per_execution = 500
+
+# Number of steps per epoch. The total number of steps (batches of samples)
+# for one epoch to finish and starting the next one. The default `None` is
+# equal to the number of samples divided by the batch size.
+steps_per_epoch = steps_per_execution
 
 # Number of epochs
 epochs = 3
@@ -301,26 +166,16 @@ epochs = 3
 # that is enqueued on the outfeed queue. Pass `[none]` to disable filtering.
 gradients_filters = ['Dense_128']
 
-
 # [List] Activation filters - strings representing which activations in the
 # second `PipelineStage` to add to the dictionary that is enqueued on the
 # outfeed queue. Pass `[none]` to disable filtering. Applicable only for
 # pipelined models.
 activations_filters = ['none']
-
 """
 Automatically set these parameters based on user input and configure the IPU
 system.
 Outfeed optimizer mode documentation can be found in [outfeed_optimizer](./outfeed_optimizer.py)
 """
-if no_pipelining:
-    num_ipus = 1
-else:
-    num_ipus = 2
-    use_gradient_accumulation = True
-
-gradient_accumulation_steps_per_replica = 4
-
 if outfeed_pre_accumulated_gradients:
     outfeed_optimizer_mode = OutfeedOptimizerMode.AFTER_COMPUTE
 else:
@@ -333,70 +188,28 @@ def process_filters(filters_input):
         return None
     return filters_input
 """
-Define a helper function to use user selected values and inject a model into
-an IPU-aware context where it's invoked:
+Next we define a helper function to create the Keras model with callbacks.
+Inside, multiple outfeed queues and callbacks are created based on the user
+prepared lists of layers in variables `gradients_filters` and 
+`activations_filters`.
 """
-def instantiate_selected_model_type(
-        gradient_accumulation_steps_per_replica,
-        no_pipelining,
-        use_gradient_accumulation,
-        model_type,
-        gradients_filters,
-        activations_filters
-):
-    # Create the outfeed queue for selected gradients.
-    # Remove the filters to get the gradients for all layers or pass different
-    # strings to the argument to select other layer(s)
+def model_with_callbacks(gradients_filters, activations_filters):
     optimizer_q = MaybeOutfeedQueue(filters=process_filters(gradients_filters))
+    act_q = MaybeOutfeedQueue(filters=process_filters(activations_filters))
 
-    # Create a callback for the gradients.
-    gradients_cb = OutfeedCallback(optimizer_q, name="Gradients callback")
-
-    # Create callbacks for the activations in the custom layers.
-    activations_q = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
-    layer_cb = OutfeedCallback(activations_q,
-                               name="Single layer activations callback")
-
-    multi_activations_q = MaybeOutfeedQueue(filters=process_filters(
-                                                      activations_filters))
-    multi_layer_cb = OutfeedCallback(multi_activations_q,
+    gradients_cb = OutfeedCallback(outfeed_queue=optimizer_q,
+                                   name="Gradients callback")
+    multi_layer_cb = OutfeedCallback(outfeed_queue=act_q,
                                      name="Multi-layer activations callback")
 
-    callbacks = [gradients_cb]
-
-    model = None
-    if not no_pipelining:
-        if model_type == REGULAR_MODEL:
-            model = create_pipeline_model(
-                multi_activations_q, gradient_accumulation_steps_per_replica
-            )
-        elif model_type == SEQUENTIAL_MODEL:
-            model = create_pipeline_sequential_model(
-                multi_activations_q, gradient_accumulation_steps_per_replica
-            )
-        callbacks += [multi_layer_cb]
-    else:
-        if not use_gradient_accumulation:
-            gradient_accumulation_steps_per_replica = 1
-
-        if model_type == SEQUENTIAL_MODEL:
-            model = create_sequential_model(
-                activations_q, gradient_accumulation_steps_per_replica
-            )
-        elif model_type == REGULAR_MODEL:
-            model = create_model(activations_q,
-                                 gradient_accumulation_steps_per_replica)
-        callbacks += [layer_cb]
-
-    if not model:
-        raise Exception("Please select proper model_type!")
-
-    return model, callbacks, optimizer_q
+    callbacks = [gradients_cb, multi_layer_cb]
+    seq_model = create_pipeline_sequential_model(act_q)
+    return seq_model, callbacks, optimizer_q
 """
 Initialise IPU configuration - more details here [`IPUConfig`](https://docs.graphcore.ai/projects/tensorflow-user-guide/en/latest/api.html#tensorflow.python.ipu.config.IPUConfig)
 """
 cfg = ipu.config.IPUConfig()
-cfg.auto_select_ipus = num_ipus
+cfg.auto_select_ipus = 2
 cfg.configure_ipu_system()
 """
 ## Placing and training the model on IPU
@@ -414,35 +227,27 @@ using the `tf.device` context.
 This tutorial uses queues for handling of outfeeds.
 """
 with strategy.scope():
-    model, callbacks, optimizer_outfeed_queue = \
-        instantiate_selected_model_type(
-            gradient_accumulation_steps_per_replica=
-            gradient_accumulation_steps_per_replica,
-            no_pipelining=no_pipelining,
-            use_gradient_accumulation=use_gradient_accumulation,
-            model_type=model_type,
-            gradients_filters=gradients_filters,
-            activations_filters=activations_filters
-        )
+    seq_model, callbacks, optimizer_outfeed_queue = \
+        model_with_callbacks(gradients_filters, activations_filters)
 
     # Build the graph passing an OutfeedOptimizer to enqueue selected gradients
-    model.compile(
+    seq_model.compile(
         loss=keras.losses.SparseCategoricalCrossentropy(),
         optimizer=OutfeedOptimizer(
             wrapped_optimizer=keras.optimizers.SGD(),
             outfeed_queue=optimizer_outfeed_queue,
             outfeed_optimizer_mode=outfeed_optimizer_mode,
-            model=model
+            model=seq_model
         ),
         steps_per_execution=steps_per_execution
     )
 
     # Train the model passing the callbacks to see the gradients
     # and activations stats
-    model.fit(
+    seq_model.fit(
         create_dataset(),
         callbacks=callbacks,
-        steps_per_epoch=steps_per_execution,
+        steps_per_epoch=steps_per_epoch,
         epochs=epochs
     )
 # sst_hide_output

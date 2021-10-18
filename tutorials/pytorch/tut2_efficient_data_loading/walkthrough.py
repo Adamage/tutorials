@@ -104,7 +104,13 @@ dataset = torch.utils.data.TensorDataset(features, labels)
 >if __name__ == '__main__':
 >```
 >This is necessary to avoid [issues with asynchronous DataLoader](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/batching.html#poptorch-asynchronousdataaccessor)
-, additionally the dataset must be serializable by pickle.
+The asynchronous dataloader calls the spawn method, which creates a new python 
+interpreter. This interpreter will import the main module of the application. 
+Therefore, we need protection against infinite spawning of new processes and 
+repeated, undesirable code invocations. Therefore, the entire executable part 
+of the script should be in an if block. Function and class definitions do not 
+have to be in this block. Additionally the dataset must be serializable by 
+pickle.
 """
 """
 We are using larger images (128x128) to simulate a heavier data load.
@@ -530,6 +536,11 @@ validate_model_performance(dataset, batch_size=16, replicas=4,
                            device_iterations=50, num_workers=4,
                            synthetic_data=False)
 """
+Throughput of dataloader for synthetic and real data should be roughly the 
+same. However, given the small number of steps (3 steps) and the very short 
+execution time of the application (of the order of thousandths of a second) the 
+results may diverge slightly more. 
+
 This example gave an idea of how increasing the global batch size can improve 
 the throughput.
 

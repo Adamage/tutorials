@@ -1,9 +1,12 @@
 # Copyright (c) 2020 Graphcore Ltd. All rights reserved.
-
 # Batch size for training
 batch_size = 8
 
-# Device iteration - batches per step
+# Device iteration - batches per step. Number of iterations the device should
+# run over the data before returning to the user.
+# This is equivalent to running the IPU in a loop over that the specified
+# number of iterations, with a new batch of data each time. However, increasing
+# deviceIterations is more efficient because the loop runs on the IPU directly.
 device_iterations = 50
 
 # Batch size for testing
@@ -13,7 +16,7 @@ test_batch_size = 80
 epochs = 10
 
 # Learning rate
-learning_rate = 0.05
+learning_rate = 0.03
 
 from tqdm.auto import tqdm
 import torch
@@ -83,7 +86,6 @@ class Network(nn.Module):
         self.layer3_act = nn.ReLU()
         self.layer3_dropout = torch.nn.Dropout(0.5)
         self.layer4 = nn.Linear(128, 10)
-        self.softmax = nn.Softmax(1)
 
     def forward(self, x):
         x = self.layer1(x)

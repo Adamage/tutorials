@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-# Copyright (c) 2020 Graphcore Ltd. All rights reserved.
+"""
+Copyright (c) 2020 Graphcore Ltd. All rights reserved.
+"""
 """
 # PyTorch(PopTorch) MNIST Training Demo
 
@@ -9,7 +11,7 @@ PopTorch. To learn more about PopTorch, see our [PyTorch for the IPU: User Guide
 """
 ## How to use this demo
 
-1) Prepare the environment.
+### 1) Prepare the environment.
 
 Install the Poplar SDK following the instructions in the [Getting Started](https://docs.graphcore.ai/en/latest/getting-started.html)
 guide for your IPU system. Make sure to run the `enable.sh` scripts for Poplar 
@@ -20,22 +22,28 @@ Then install the package requirements:
 pip install -r requirements.txt
 ```
 
-2) Run the program. Note that the PopTorch Python API only supports Python 3.
-Data will be automatically downloaded using torchvision utils.
+### 2) Run the program. 
+Note that the PopTorch Python API only supports Python 3. Data will be 
+automatically downloaded using torchvision utils.
 
 ```bash
 python3 mnist_poptorch.py
 ```
 """
 """
-Select your hyperparameters in this cell. If you wish to modify them, re-run
-all cells below it. For further reading on hyperparameters, see [Hyperparameters (machine learning)](https://en.wikipedia.org/wiki/Hyperparameter_(machine_learning))
-Set up parameters for training:
+### 3) Hyperparameters
+Set the hyperparameters for this demo. If you're running this example in 
+a Jupyter notebook and wish to modify them, re-run all the cells below.
+For further reading on hyperparameters, see [Hyperparameters (machine learning)](https://en.wikipedia.org/wiki/Hyperparameter_(machine_learning))
 """
 # Batch size for training
 batch_size = 8
 
-# Device iteration - batches per step
+# Device iteration - batches per step. Number of iterations the device should
+# run over the data before returning to the user.
+# This is equivalent to running the IPU in a loop over that the specified
+# number of iterations, with a new batch of data each time. However, increasing
+# deviceIterations is more efficient because the loop runs on the IPU directly.
 device_iterations = 50
 
 # Batch size for testing
@@ -45,7 +53,7 @@ test_batch_size = 80
 epochs = 10
 
 # Learning rate
-learning_rate = 0.05
+learning_rate = 0.03
 """
 Import required libraries:
 """
@@ -56,7 +64,7 @@ import torchvision
 import poptorch
 import torch.optim as optim
 """
-Download the datasets for MNIST - database for handwritten digits.
+Download the datasets for MNIST and set up data loaders.
 Source: [The MNIST Database](http://yann.lecun.com/exdb/mnist/)
 """
 local_dataset_path = '~/.torch/datasets'
@@ -127,7 +135,6 @@ class Network(nn.Module):
         self.layer3_act = nn.ReLU()
         self.layer3_dropout = torch.nn.Dropout(0.5)
         self.layer4 = nn.Linear(128, 10)
-        self.softmax = nn.Softmax(1)
 
     def forward(self, x):
         x = self.layer1(x)
@@ -139,8 +146,8 @@ class Network(nn.Module):
         return x
 
 """
-Here we define a thin wrapper around the `torch.nn.Module` that will use
-cross-entropy loss function - see more [here](https://en.wikipedia.org/wiki/Cross_entropy#Cross-entropy_loss_function_and_logistic_regression)
+Next we define a thin wrapper around the `torch.nn.Module` that will use
+the cross-entropy loss function. To learn more about cross entropy click [here](https://en.wikipedia.org/wiki/Cross_entropy#Cross-entropy_loss_function_and_logistic_regression).
 
 This class is creating a custom module to compose the Neural Network and 
 the Cross Entropy module into one object, which under the hood will invoke 
@@ -173,8 +180,8 @@ representation of the model object
 print(model_with_loss)
 """
 Now we apply the model wrapping function, which will perform a shallow copy
-of the PyTorch model. To train the model, we also will use the Stochastic 
-Gradient Descent with no momentum [SGD](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/reference.html#poptorch.optim.SGD).
+of the PyTorch model. To train the model we will use the Stochastic Gradient 
+Descent with no momentum [SGD](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/reference.html#poptorch.optim.SGD).
 """
 training_model = poptorch.trainingModel(
     model_with_loss,
@@ -217,8 +224,8 @@ Release resources:
 training_model.detachFromDevice()
 """
 Let's check the validation loss on IPU using the trained model. The weights 
-in `model.parameters()` will be copied from the IPU to the host. The trained
-model will be reused to compile the new inference model.
+in `model.parameters()` will be copied from the IPU to the host. The weights
+from the trained model will be reused to compile the new inference model.
 """
 inference_model = poptorch.inferenceModel(model)
 """

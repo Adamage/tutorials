@@ -463,6 +463,7 @@ def validate_model_performance(dataset, device_iterations=50,
 
     items_per_second = (steps * device_iterations * batch_size * replicas) / t.seconds
     print(f"DataLoader: {items_per_second:.2f} items/s")
+    print(f"Dataloader execution time: {t.seconds:.2f} s")
 
     if synthetic_data:
         # With synthetic data enabled, no data is copied from the host to the IPU, so we don't use
@@ -477,6 +478,7 @@ def validate_model_performance(dataset, device_iterations=50,
 
     items_per_second = (steps * device_iterations * batch_size * replicas) / t.seconds
     print(f"IPU throughput: {items_per_second:.2f} items/s")
+    print(f"Dataloader with IPU training execution time: {t.seconds:.2f} s")
 
     training_data.terminate()
 

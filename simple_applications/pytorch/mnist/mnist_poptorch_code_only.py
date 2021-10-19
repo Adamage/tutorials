@@ -111,6 +111,8 @@ model = Network()
 model_with_loss = TrainingModelWithLoss(model)
 model_opts = poptorch.Options().deviceIterations(device_iterations)
 
+model_opts = model_opts.anchorMode(poptorch.AnchorMode.All)
+
 print(model_with_loss)
 
 training_model = poptorch.trainingModel(

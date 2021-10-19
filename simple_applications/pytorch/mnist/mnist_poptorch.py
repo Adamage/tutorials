@@ -174,6 +174,20 @@ model = Network()
 model_with_loss = TrainingModelWithLoss(model)
 model_opts = poptorch.Options().deviceIterations(device_iterations)
 """
+Next we will set the `AnchorMode` for our training. By default, `poptorch` will
+return to the host machine only a limited set of information for performance
+reasons. By default, only the last batch of the internal loop is returned which
+is represented by setting `AnchorMode.Final`. When inspecting the training
+performance as it is executing, values like accuracy or losses value will be
+then calculated only for that last batch, specifically the `batch_size` out of
+the whole step which is `batch_size*device_iterations`.
+We can set this to `AnchorMode.All` to be able to present the full information.
+This has an impact on the speed of training, due to overhead of transferring
+more data to the host machine.
+For further reading on all of the modes please read [`AnchorMode` documentation](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/reference.html?highlight=anchorMode#poptorch.Options.anchorMode).
+"""
+model_opts = model_opts.anchorMode(poptorch.AnchorMode.All)
+"""
 We can check if the model is assembled correctly by printing the string 
 representation of the model object
 """

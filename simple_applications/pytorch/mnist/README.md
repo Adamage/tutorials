@@ -5,7 +5,7 @@ PopTorch. To learn more about PopTorch, see our [PyTorch for the IPU: User Guide
 
 ## How to use this demo
 
-### 1) Prepare the environment.
+### Environment preparation
 
 Install the Poplar SDK following the instructions in the [Getting Started](https://docs.graphcore.ai/en/latest/getting-started.html)
 guide for your IPU system. Make sure to run the `enable.sh` scripts for Poplar 
@@ -16,23 +16,24 @@ Then install the package requirements:
 pip install -r requirements.txt
 ```
 
-### 2) Run the program. 
-Note that the PopTorch Python API only supports Python 3. Data will be 
-automatically downloaded using torchvision utils.
-
-```bash
-python3 mnist_poptorch.py
-```
-
-### 3) Hyperparameters
+### Setting hyperparameters
 Set the hyperparameters for this demo. If you're running this example in 
 a Jupyter notebook and wish to modify them, re-run all the cells below.
 For further reading on hyperparameters, see [Hyperparameters (machine learning)](https://en.wikipedia.org/wiki/Hyperparameter_(machine_learning))
 
 
 ```python
-# Batch size for training
+# Learning rate.
+learning_rate = 0.03
+
+# Number of epochs to train.
+epochs = 10
+
+# Batch size for training.
 batch_size = 8
+
+# Batch size for testing.
+test_batch_size = 80
 
 # Device iteration - batches per step. Number of iterations the device should
 # run over the data before returning to the user.
@@ -40,16 +41,9 @@ batch_size = 8
 # number of iterations, with a new batch of data each time. However, increasing
 # deviceIterations is more efficient because the loop runs on the IPU directly.
 device_iterations = 50
-
-# Batch size for testing
-test_batch_size = 80
-
-# Number of epochs to train
-epochs = 10
-
-# Learning rate
-learning_rate = 0.03
 ```
+
+## Training a PopTorch model for MNIST classification
 
 Import required libraries:
 
@@ -64,7 +58,7 @@ import torch.optim as optim
 ```
 
 Download the datasets for MNIST and set up data loaders.
-Source: [The MNIST Database](http://yann.lecun.com/exdb/mnist/)
+Source: [The MNIST Database](http://yann.lecun.com/exdb/mnist/).
 
 
 ```python
@@ -153,15 +147,11 @@ class Network(nn.Module):
 ```
 
 Next we define a thin wrapper around the `torch.nn.Module` that will use
-the cross-entropy loss function. To learn more about cross entropy click [here](https://en.wikipedia.org/wiki/Cross_entropy#Cross-entropy_loss_function_and_logistic_regression).
+the cross-entropy loss function.
 
 This class is creating a custom module to compose the Neural Network and 
 the Cross Entropy module into one object, which under the hood will invoke 
-the `__call__` function on `nn.Module` and consequently the `forward` method 
-when called like this:
-```python
-prediction, losses = TrainingModelWithLoss(Network())(data, labels)
-```
+the `__call__` function on `nn.Module` and consequently the `forward` method.
 
 
 ```python
@@ -186,17 +176,18 @@ model_with_loss = TrainingModelWithLoss(model)
 model_opts = poptorch.Options().deviceIterations(device_iterations)
 ```
 
-Next we will set the `AnchorMode` for our training. By default, `poptorch` will
+Next we will set the `AnchorMode` for our training. By default, PopTorch will
 return to the host machine only a limited set of information for performance
-reasons. By default, only the last batch of the internal loop is returned which
-is represented by setting `AnchorMode.Final`. When inspecting the training
-performance as it is executing, values like accuracy or losses value will be
-then calculated only for that last batch, specifically the `batch_size` out of
-the whole step which is `batch_size*device_iterations`.
+reasons. This is represented by having `AnchorMode.Final` as the default, which
+means that only the final batch of the internal loop is returned to the host.
+When inspecting the training performance as it is executing, values like 
+accuracy or losses will then be calculated only for that last batch, 
+specifically the `batch_size` out of the whole step which is 
+`batch_size*device_iterations`.
 We can set this to `AnchorMode.All` to be able to present the full information.
 This has an impact on the speed of training, due to overhead of transferring
 more data to the host machine.
-For further reading on all of the modes please read [`AnchorMode` documentation](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/reference.html?highlight=anchorMode#poptorch.Options.anchorMode).
+To learn about all values for `AnchorMode`, please see the [PopTorch API documentation](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/reference.html?highlight=anchorMode#poptorch.Options.anchorMode).
 
 
 ```python
@@ -204,7 +195,7 @@ model_opts = model_opts.anchorMode(poptorch.AnchorMode.All)
 ```
 
 We can check if the model is assembled correctly by printing the string 
-representation of the model object
+representation of the model object.
 
 
 ```python
@@ -233,8 +224,8 @@ print(model_with_loss)
 
 
 Now we apply the model wrapping function, which will perform a shallow copy
-of the PyTorch model. To train the model we will use the Stochastic Gradient 
-Descent with no momentum [SGD](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/reference.html#poptorch.optim.SGD).
+of the PyTorch model. To train the model, we will use [SGD](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/reference.html#poptorch.optim.SGD),
+the Stochastic Gradient Descent with no momentum.
 
 
 ```python
@@ -248,7 +239,8 @@ training_model = poptorch.trainingModel(
 We are ready to start training. However to track the accuracy while training
 we need to define one more helper function. During the training, not every 
 samples prediction is returned for efficiency reasons, so this helper function
-will check accuracy for labels where prediction is available.
+will check accuracy for labels where prediction is available. This behavior
+is controlled by setting `AnchorMode` in `poptorch.Options()`.
 
 
 ```python
@@ -260,8 +252,8 @@ def accuracy(predictions, labels):
     return accuracy
 ```
 
-This code will perform the requested amount of epochs and batches using the
-configured Graphcore IPUs.
+This code will perform the training over the requested amount of epochs
+and batches using the configured Graphcore IPUs.
 
 
 ```python
@@ -287,6 +279,8 @@ Release resources:
 training_model.detachFromDevice()
 ```
 
+## Evaluating the trained model
+
 Let's check the validation loss on IPU using the trained model. The weights 
 in `model.parameters()` will be copied from the IPU to the host. The weights
 from the trained model will be reused to compile the new inference model.
@@ -296,7 +290,7 @@ from the trained model will be reused to compile the new inference model.
 inference_model = poptorch.inferenceModel(model)
 ```
 
-Perform validation
+Perform validation.
 
 
 ```python

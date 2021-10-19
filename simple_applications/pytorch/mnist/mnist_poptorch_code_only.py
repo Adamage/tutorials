@@ -1,6 +1,15 @@
 # Copyright (c) 2020 Graphcore Ltd. All rights reserved.
-# Batch size for training
+# Learning rate.
+learning_rate = 0.03
+
+# Number of epochs to train.
+epochs = 10
+
+# Batch size for training.
 batch_size = 8
+
+# Batch size for testing.
+test_batch_size = 80
 
 # Device iteration - batches per step. Number of iterations the device should
 # run over the data before returning to the user.
@@ -8,15 +17,6 @@ batch_size = 8
 # number of iterations, with a new batch of data each time. However, increasing
 # deviceIterations is more efficient because the loop runs on the IPU directly.
 device_iterations = 50
-
-# Batch size for testing
-test_batch_size = 80
-
-# Number of epochs to train
-epochs = 10
-
-# Learning rate
-learning_rate = 0.03
 
 from tqdm.auto import tqdm
 import torch

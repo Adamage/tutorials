@@ -109,13 +109,15 @@ interpreter. This interpreter will import the main module of the application.
 Therefore, we need protection against infinite spawning of new processes and 
 repeated, undesirable code invocations. Therefore, the entire executable part 
 of the script should be in an if block. Function and class definitions do not 
-have to be in this block. Additionally the dataset must be serializable by 
-pickle.
+have to be in this block. This change does not apply to interactive python 
+Interpreters (e.g. Jupyter notebooks) which support multiprocessing in a 
+different way. Additionally the dataset must be serializable by pickle.
 """
 """
-We are using larger images (128x128) to simulate a heavier data load.
-This will cause the input size of the layer `fc1` to change from  
-`self.fc1 = nn.Linear(972, 100)` to `self.fc1 = nn.Linear(41772, 100)` 
+In tutorial 1 we used images from the MNIST dataset with a size of 28x28, now
+we will use larger images (128x128) to simulate a heavier data load.
+This change affects the input size of the layer `fc1` which we change from  
+`self.fc1 = nn.Linear(972, 100)` to `self.fc1 = nn.Linear(41772, 100)`. 
 
 Let’s set up a PopTorch DataLoader in asynchronous mode.
 """

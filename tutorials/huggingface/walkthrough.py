@@ -33,7 +33,7 @@ raw_datasets = load_dataset("imdb")
 raw_datasets.keys()
 """
 The `load_datasets` method returns a dictionary containing a dataset which is 
-already split. We use the "train" split for training and the "test" split for 
+already split. We use the `train` split for training and the `test` split for 
 validation.
 """
 """
@@ -47,12 +47,12 @@ it is not accepted as input to the model.
 We used ELECTRA as our transformer to train. It is an extension of BERT which 
 is characterised by a shorter training time and therefore fits well into the 
 tutorial. The model description together with implementation details can be 
-found in (HuggingFace documentation)[https://huggingface.co/transformers/model_doc/electra.html].
+found in [HuggingFace documentation](https://huggingface.co/transformers/model_doc/electra.html).
 """
 
 from transformers import AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained("google/electra-base-generator")
+tokenizer = AutoTokenizer.from_pretrained("google/electra-small-generator")
 
 
 def tokenize_function(examples):
@@ -115,7 +115,7 @@ eval_dataloader = poptorch.DataLoader(
 """
 In this example, we have configured `deviceIteration` and `anchorMode`.
 
-*Device iterations* is one cycle of that loop, which runs entirely on the IPU 
+**Device iterations** is one cycle of that loop, which runs entirely on the IPU 
 (the device), and which starts with a new batch of data. This option specifies 
 the number of batches that is prepared by the host (CPU) for the IPU. 
 The higher this number, the less the IPU has to interact with the CPU, 
@@ -123,7 +123,7 @@ for example to request and wait for data, so that the IPU can loop faster.
 However, the user will have to wait for the IPU to go over all the iterations 
 before getting the results back. 
 
-*Anchor mode* specifies which data is returned from the model located on the 
+**Anchor mode** specifies which data is returned from the model located on the 
 IPU to the CPU. By default, PPopTorch will only return the last batch to the 
 host machine after all iterations of the device, which is represented by
 `AnchorMode.Final`. We set this parameter to `AnchorMode.All` to obtain every
@@ -142,7 +142,7 @@ from transformers import AutoModelForSequenceClassification
 from poptorch.optim import AdamW
 
 model = AutoModelForSequenceClassification.from_pretrained(
-    "google/electra-base-generator",
+    "google/electra-small-generator",
     num_labels=2,
     return_dict=False,
     torchscript=True
@@ -153,22 +153,22 @@ optimizer = AdamW(model.parameters(), lr=1e-5)
 Next, we define how to split the model between the IPU devices. We use 4 
 devices, and we place the embedding layer on the first device `IPU:0`. 
 The encoder in the ELECTRA model consists of 12 layers, which we distribute 
-equally with 3 layers on each device, finally we place the classifier layer 
+equally with 4 layers on each device, finally we place the classifier layer 
 on the last IPU:3 device.
 
 In order to place a given layer on a particular device, we wrap it using 
 `poptorch.BeginBlock()`, which takes as arguments the instance of 
-`torch.nn.Module`, the name of the layer for display in the (PopVision profiler)[https://docs.graphcore.ai/projects/graphcore-popvision-user-guide/en/latest/], 
+`torch.nn.Module`, the name of the layer for display in the [PopVision profiler](https://docs.graphcore.ai/projects/graphcore-popvision-user-guide/en/latest/), 
 and the device ID on which the layer should be placed.
 """
 model.electra.embeddings = poptorch.BeginBlock(
     model.electra.embeddings, "Embedding", ipu_id=0
 )
 
-layer_ipu = [0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3]
-for index, (layer, ipu) in enumerate(zip(model.electra.encoder.layer, layer_ipu)):
+for index, layer in enumerate(model.electra.encoder.layer):
+    ipu_id = index // 4 + 1
     model.electra.encoder.layer[index] = poptorch.BeginBlock(
-        layer, f"Encoder{index}", ipu_id=ipu
+        layer, f"Encoder{index}", ipu_id=ipu_id
     )
 
 model.classifier = poptorch.BeginBlock(
@@ -205,6 +205,8 @@ class IPUModel(torch.nn.Module):
             loss = poptorch.identity_loss(loss, reduction="none")
 
         return loss, logits
+
+
 """
 We now create `trainingModel` and `inferenceModel`, for that task we use the 
 `poptorch.trainingModel` and `poptorch.inferenceModel`. They takes an instance 
@@ -214,84 +216,96 @@ which we have instantiated previously, and an optimizer in case of
 of our model to a program that can be run using IPU. Then we will compile the 
 models using one batch from our dataset.
 
-More information about wrapping function can be found in the (documentation)[https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/reference.html#model-wrapping-functions].
+In addition, the compilation of the model automatically moves it to the device. 
+We would like to use only one model (for training or inference) on the device 
+at a time, as this will allow us to use a larger model. Therefore, we call 
+`detachFromDevice` to detach the model from the IPU device.
+
+Compilation may take a few minutes. More information about wrapping function 
+can be found in the [documentation](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/reference.html#model-wrapping-functions).
 """
 
 trainingModel = poptorch.trainingModel(
     IPUModel(model), options=opts, optimizer=optimizer
 )
 trainingModel.compile(**next(iter(train_dataloader)))
-
+trainingModel.detachFromDevice()
+"""
+"""
 inferenceModel = poptorch.inferenceModel(
     IPUModel(model), options=val_opts
 )
 inferenceModel.compile(**next(iter(eval_dataloader)))
-
+inferenceModel.detachFromDevice()
 """
+Our model and data are ready to run on IPU. We proceed to implement the 
+function responsible for training the model. Here we set the model into the 
+training state, and add a progress bar. We do not need to include 
+`loss.backward()` as `poptorch.trainingModel()` does this itself.
 
+At the beginning of our method we attach the model to the IPU using the 
+`attachToDevice()` method, and at the end we detach using `detachFromDevice()`. 
+It is worth noting here that detaching the model from the device will 
+automatically synchronise the updated weights of the model and transfer them 
+to the CPU, so when we attach the model to the inference to the IPU device, 
+the model will have the current state and copying the weights between devices 
+is not necessary.
 """
 from tqdm.auto import tqdm
 
-epochs = 2
+epochs = 3
 number_of_iterations = epochs * (len(train_dataloader) + len(eval_dataloader))
 progress_bar = tqdm(range(number_of_iterations))
 
 
 def train_epoch():
     trainingModel.train()
+    trainingModel.attachToDevice()
+
     for batch in train_dataloader:
         loss, logits = trainingModel(**batch)
-        train_loss = loss.item()
         progress_bar.update(1)
+
+    trainingModel.detachFromDevice()
 
 
 """
-
+The function to validate is marked with the decorator `torch.no_grad()`, 
+causes the gradients are not calculated, moreover, in addition to setting the 
+model into the evaluation state, we add storing predictions to count the 
+accuracy at the end of the epoch.
 """
 from sklearn.metrics import accuracy_score
 
 
+@torch.no_grad()
 def val_epoch():
     inferenceModel.eval()
+    inferenceModel.attachToDevice()
     y_pred, y_true = [], []
+
     for batch in eval_dataloader:
         y_true.extend(batch['labels'].tolist())
-
-        with torch.no_grad():
-            loss, logits = inferenceModel(**batch)
+        loss, logits = inferenceModel(**batch)
 
         y_pred.extend(logits.argmax(dim=1).tolist())
         progress_bar.update(1)
 
     acc = accuracy_score(y_true, y_pred)
     print(f'{acc:.3f}')
+    inferenceModel.detachFromDevice()
 
 
 """
-
-"""
-
-
-def update_weights():
-    trainingModel.copyWeightsToHost()
-    inferenceModel.copyWeightsToDevice()
-
-
-"""
-
+Finally, by bringing together everything we have written so far, we can start 
+the training process.
 """
 for epoch in range(epochs):
     train_epoch()
-    update_weights()
     val_epoch()
 
 """
-
-"""
-
-train_dataloader.terminate()
-eval_dataloader.terminate()
-
-"""
-
+In summary, in this tutorial we have successfully fine-tuned a model from 
+HuggingFace for sentiment prediction using IPU devices. If you are interested 
+in other tutorials you are encouraged to check out [Graphcore Tutorials](https://github.com/graphcore/tutorials).
 """

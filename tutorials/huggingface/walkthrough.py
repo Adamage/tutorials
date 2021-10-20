@@ -5,14 +5,13 @@ Version 2.0
 """
 # Fine-tuning a pretrained transformer
 This tutorial demonstrates how to fine-tune a pretrained model from the 
-transformers library using IPUs. The tutorial extends the HuggingFace tutorial [Fine-tuning a pretrained model](https://huggingface.co/transformers/training.html)
-with IPU specific code.
+transformers library using IPUs. Tt is based on [Fine-tuning a pretrained model](https://huggingface.co/transformers/training.html).
 """
 """
 ### Environment preparation
-Install the Poplar SDK following the instructions in the Getting Started guide 
-for your IPU system. Make sure to run the enable.sh scripts for Poplar and 
-PopART and activate a Python3 virtualenv with PopTorch installed.
+Install the Poplar SDK following the instructions in the [Getting Started](https://docs.graphcore.ai/en/latest/software.html#getting-started)
+guide for your IPU system. Make sure to run the enable.sh scripts for Poplar 
+and PopART and activate a Python3 virtualenv with PopTorch installed.
 
 Then install the package requirements:
 ```bash
@@ -22,8 +21,8 @@ pip install -r requirements.txt
 """
 ### Preparing the datasets
 
-As our data, we use the IMDB dataset containing movie reviews together with 
-information whether the review is positive or negative. To load the data we 
+We use the IMDB dataset containing movie reviews together with information on 
+whether the review is positive or negative as our data. To load the data we 
 use the datasets library.
 """
 
@@ -40,14 +39,14 @@ already split. We use the `train` split for training and the `test` split for
 validation.
 """
 """
-Next, the text must be transformed into a form understandable by the model. 
+The text must be transformed into a form understandable by the model. 
 For this purpose, we create a function responsible for tokenization, which 
-takes as input a batch from the dataset and returns a tokenized example.
-Note that we set the `max_length` and `truncation` parameters, this ensures 
-that all examples have the same length. Also, we remove the `text` field as 
-it is not accepted as input to the model.
+takes as input a batch from the dataset and returns a tokenized examples.
+Note, that we set `max_length` and `truncation` parameters, which ensures 
+that all examples have the same length. Moreover, we remove the `text` field,
+because it is not accepted as input to the model.
 
-We used ELECTRA as our transformer to train. It is an extension of BERT which 
+We used ELECTRA as our model. It is an extension of BERT which 
 is characterised by a shorter training time and therefore fits well into the 
 tutorial. The model description together with implementation details can be 
 found in [HuggingFace documentation](https://huggingface.co/transformers/model_doc/electra.html).
@@ -67,7 +66,7 @@ tokenized_datasets = raw_datasets.map(tokenize_function,
 # sst_hide_output
 """
 When the data has been processed, we can adjust it to the input of our model. 
-To do this, we rename the column and set the format to `torch` which will make 
+To do this, we rename the column and set the format to `torch`, which will make 
 the data to be stored in tensors.
 """
 
@@ -86,11 +85,11 @@ eval_dataset.set_format(type='torch')
 """
 Next, when the datasets are ready we proceed to create the dataloaders. 
 This is the first time we will use the capabilities of IPU - instead of using 
-the `DataLoader` class from PyTroch we will use the implementation from 
-PopTorch, which inherits from it and is optimised for memory usage and 
+the `DataLoader` class from Pytorch we will use the implementation from 
+PopTorch, which inherits from Pytorch and is optimised for memory usage and 
 performance.
 
-The dataloading and the execution of the model on the IPU can be controlled 
+The data loading and the execution of the model on the IPU can be controlled 
 using `poptorch.Options`. These options are used by PopTorch's wrappers 
 such as `poptorch.DataLoader` and `poptorch.trainingModel`.
 """
@@ -112,27 +111,29 @@ eval_dataloader = poptorch.DataLoader(
 """
 In this example, we have configured `deviceIteration` and `anchorMode`.
 
-**Device iterations** is one cycle of that loop, which runs entirely on the IPU 
+**Device iteration** is one cycle of loop, which runs entirely on the IPU 
 (the device), and which starts with a new batch of data. This option specifies 
-the number of batches that is prepared by the host (CPU) for the IPU. 
+the number of batches that are processed by the IPU during this cycle. 
 The higher this number, the less the IPU has to interact with the CPU, 
-for example to request and wait for data, so that the IPU can loop faster. 
+for example, to request and wait for data, so that the IPU can loop faster. 
 However, the user will have to wait for the IPU to go over all the iterations 
 before getting the results back. 
 
 **Anchor mode** specifies which data is returned from the model located on the 
-IPU to the CPU. By default, PPopTorch will only return the last batch to the 
+IPU to the CPU. By default, PopTorch returns the last batch to the 
 host machine after all iterations of the device, which is represented by
-`AnchorMode.Final`. We set this parameter to `AnchorMode.All` to obtain every
-model output during the validation stage. This has an impact on the performance,
-due to overhead of transferring more data to the host machine.
+`AnchorMode.Final`. We set this parameter to `AnchorMode.All` to obtain every 
+output from the model during the validation stage. This has an impact on the 
+performance, due to the overhead of transferring more data to the host machine.
 
-The list of other options is available in the [documentation](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/overview.html#options).
+The full list of options is available in the [documentation](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/overview.html#options).
 """
 """
-We now load the the pretrained model and initialize the optimizer. Note that 
+### Preparing the model
+
+Next, load the pretrained model and initialize the optimizer. Note that 
 we use `poptorch.optim.AdamW`, which is optimised for distributed training.
-More optimizers can be found in the [documentation](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/reference.html#optimizers).
+More optimizers can be [here](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/reference.html#optimizers).
 """
 
 from transformers import AutoModelForSequenceClassification
@@ -147,11 +148,11 @@ model = AutoModelForSequenceClassification.from_pretrained(
 optimizer = AdamW(model.parameters(), lr=1e-6)
 # sst_hide_output
 """
-Next, we define how to split the model between the IPU devices. We use 4 
+Let's define how to split the model between the IPU devices. We use 4 
 devices, and we place the embedding layer on the first device `IPU:0`. 
 The encoder in the ELECTRA model consists of 12 layers, which we distribute 
-equally with 4 layers on each device, finally we place the classifier layer 
-on the last IPU:3 device.
+equally with 4 layers on each device on each of 3 devices, finally we place 
+the classifier layer on the last IPU:3 device.
 
 In order to place a given layer on a particular device, we wrap it using 
 `poptorch.BeginBlock()`, which takes as arguments the instance of 
@@ -173,13 +174,13 @@ model.classifier = poptorch.BeginBlock(
 )
 """
 We need to take one more step in order to adapt the model from HuggingFace to 
-work with IPU. When a model uses multiple loss functions, or uses a custom loss 
+work with IPU. When a model uses multiple loss functions or uses a custom loss 
 function, it has to be wrapped in `poptorch.identity_loss(loss)`.
 
 Due to the fact that we can not directly modify the model class, we create 
 a class that takes our ELECTRA model as a parameter and overload the `forward` 
 function, in which we call the `forward` function from ELECTRA and then wrap 
-the returned loss in `identity_loss`. Here we we use composition, however 
+the returned loss in `identity_loss`. Here we use the composition, however, 
 this task could be solved using inheritance.
 """
 import torch
@@ -205,20 +206,20 @@ class IPUModel(torch.nn.Module):
 
 
 """
-We now create `trainingModel` and `inferenceModel`, for that task we use the 
-`poptorch.trainingModel` and `poptorch.inferenceModel`. They takes an instance 
+Now, we create `trainingModel` and `inferenceModel`, for this task we use the 
+`poptorch.trainingModel` and `poptorch.inferenceModel`. They take an instance 
 of a `torch.nn.Module`, such as our model, an instance of `poptorch.Options` 
 which we have instantiated previously, and an optimizer in case of 
-`poptorch.trainingModel`. This wrapper use TorchScript, and manage translation 
-of our model to a program that can be run using IPU. Then we will compile the 
-models using one batch from our dataset.
+`poptorch.trainingModel`. This wrapper uses TorchScript, and manages the 
+translation of our model to a program that can be run using IPU. Then we will 
+compile the models using one batch from our dataset.
 
-In addition, the compilation of the model automatically moves it to the device. 
-We would like to use only one model (for training or inference) on the device 
-at a time, as this will allow us to use a larger model. Therefore, we call 
-`detachFromDevice` to detach the model from the IPU device.
+In addition, the compilation of the model automatically attaches it to the 
+device. We would like to use only one model (for the training or the inference) 
+on the device at a time, as this will allow us to use a larger model. Therefore, 
+we call `detachFromDevice` to detach the model from the IPU device.
 
-Compilation may take a few minutes. More information about wrapping function 
+Compilation may take a few minutes. More information about the wrapping function 
 can be found in the [documentation](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/reference.html#model-wrapping-functions).
 """
 
@@ -239,16 +240,18 @@ inferenceModel.detachFromDevice()
 # sst_hide_output
 
 """
+### Training and validating the model
+
 Our model and data are ready to run on IPU. We proceed to implement the 
 function responsible for training the model. Here we set the model into the 
 training state, and add a progress bar. We do not need to include 
-`loss.backward()` as `poptorch.trainingModel()` does this itself.
+`loss.backward()` as `poptorch.trainingModel` does this itself.
 
-At the beginning of our method we attach the model to the IPU using the 
-`attachToDevice()` method, and at the end we detach using `detachFromDevice()`. 
-It is worth noting here that detaching the model from the device will 
+At the beginning of our method, we attach the model to the IPU using the 
+`attachToDevice` method, and at the end we detach it using `detachFromDevice`. 
+It is worth noting here, that detaching the model from the device will 
 automatically synchronise the updated weights of the model and transfer them 
-to the CPU, so when we attach the model to the inference to the IPU device, 
+to the CPU, so when we attach the model for the inference to the IPU device, 
 the model will have the current state and copying the weights between devices 
 is not necessary.
 """
@@ -273,7 +276,7 @@ def train_epoch():
 
 """
 The function to validate is marked with the decorator `torch.no_grad()`, 
-causes the gradients are not calculated, moreover, in addition to setting the 
+causes the gradients are not calculated. Moreover, in addition to setting the 
 model into the evaluation state, we add storing predictions to count the 
 accuracy at the end of the epoch.
 """
@@ -308,7 +311,7 @@ for epoch in range(epochs):
     val_epoch()
 
 """
-In summary, in this tutorial we have successfully fine-tuned a model from 
+To sum up, in this tutorial, we have successfully fine-tuned a model from 
 HuggingFace for sentiment prediction using IPU devices. If you are interested 
 in other tutorials you are encouraged to check out [Graphcore Tutorials](https://github.com/graphcore/tutorials).
 """

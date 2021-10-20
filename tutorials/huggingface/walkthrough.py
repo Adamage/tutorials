@@ -133,12 +133,62 @@ due to overhead of transferring more data to the host machine.
 The list of these options is available in the [documentation](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/overview.html#options).
 """
 """
+We now load the the pretrained model and initialize the optimizer. Note that 
+we use `poptorch.optim.AdamW`, which is optimised for distributed training.
+More optimizers can be found in the [documentation](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/reference.html#optimizers).
+"""
 
+from transformers import AutoModelForSequenceClassification
+from poptorch.optim import AdamW
+
+model = AutoModelForSequenceClassification.from_pretrained(
+    "google/electra-base-generator",
+    num_labels=2,
+    return_dict=False,
+    torchscript=True
+)
+optimizer = AdamW(model.parameters(), lr=1e-5)
+
+"""
+Next, we define how to split the model between the IPU devices. We use 4 
+devices, and we place the embedding layer on the first device `IPU:0`. 
+The encoder in the ELECTRA model consists of 12 layers, which we distribute 
+equally with 3 layers on each device, finally we place the classifier layer 
+on the last IPU:3 device.
+
+In order to place a given layer on a particular device, we wrap it using 
+`poptorch.BeginBlock()`, which takes as arguments the instance of 
+`torch.nn.Module`, the name of the layer for display in the (PopVision profiler)[https://docs.graphcore.ai/projects/graphcore-popvision-user-guide/en/latest/], 
+and the device ID on which the layer should be placed.
+"""
+model.electra.embeddings = poptorch.BeginBlock(
+    model.electra.embeddings, "Embedding", ipu_id=0
+)
+
+layer_ipu = [0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3]
+for index, (layer, ipu) in enumerate(zip(model.electra.encoder.layer, layer_ipu)):
+    model.electra.encoder.layer[index] = poptorch.BeginBlock(
+        layer, f"Encoder{index}", ipu_id=ipu
+    )
+
+model.classifier = poptorch.BeginBlock(
+    model.classifier, "Classifier", ipu_id=3
+)
+"""
+We need to take one more step in order to adapt the model from HuggingFace to 
+work with IPU. When a model uses multiple loss functions, or uses a custom loss 
+function, it has to be wrapped in `poptorch.identity_loss(loss)`.
+
+Due to the fact that we can not directly modify the model class, we create 
+a class that takes our ELECTRA model as a parameter and overload the `forward` 
+function, in which we call the `forward` function from ELECTRA and then wrap 
+the returned loss in `identity_loss`. Here we we use composition, however 
+this task could be solved using inheritance.
 """
 import torch
 
 
-class Wrapped(torch.nn.Module):
+class IPUModel(torch.nn.Module):
     def __init__(self, model):
         super().__init__()
         self.model = model
@@ -152,52 +202,29 @@ class Wrapped(torch.nn.Module):
         )
 
         if self.model.training:
-            final_loss = poptorch.identity_loss(loss, reduction="none")
-            return final_loss, logits
+            loss = poptorch.identity_loss(loss, reduction="none")
 
         return loss, logits
+"""
+We now create `trainingModel` and `inferenceModel`, for that task we use the 
+`poptorch.trainingModel` and `poptorch.inferenceModel`. They takes an instance 
+of a `torch.nn.Module`, such as our model, an instance of `poptorch.Options` 
+which we have instantiated previously, and an optimizer in case of 
+`poptorch.trainingModel`. This wrapper use TorchScript, and manage translation 
+of our model to a program that can be run using IPU. Then we will compile the 
+models using one batch from our dataset.
 
-
+More information about wrapping function can be found in the (documentation)[https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/reference.html#model-wrapping-functions].
 """
 
-"""
-from transformers import AutoModelForSequenceClassification
-from poptorch.optim import AdamW
-
-model = AutoModelForSequenceClassification.from_pretrained(
-    "google/electra-base-generator",
-    num_labels=2,
-    return_dict=False,
-    torchscript=True
+trainingModel = poptorch.trainingModel(
+    IPUModel(model), options=opts, optimizer=optimizer
 )
-optimizer = AdamW(model.parameters(), lr=1e-5)
-
-"""
-
-"""
-
-model.electra.embeddings = poptorch.BeginBlock(
-    model.electra.embeddings, "Embedding", ipu_id=0
-)
-
-layer_ipu = [0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3]
-for index, layer in enumerate(model.electra.encoder.layer):
-    ipu = layer_ipu[index]
-    model.electra.encoder.layer[index] = poptorch.BeginBlock(
-        layer, f"Encoder{index}", ipu_id=ipu
-    )
-
-model.classifier = poptorch.BeginBlock(
-    model.classifier, "Classifier", ipu_id=3
-)
-"""
-
-"""
-
-trainingModel = poptorch.trainingModel(Wrapped(model), options=opts)
 trainingModel.compile(**next(iter(train_dataloader)))
 
-inferenceModel = poptorch.inferenceModel(Wrapped(model), options=val_opts)
+inferenceModel = poptorch.inferenceModel(
+    IPUModel(model), options=val_opts
+)
 inferenceModel.compile(**next(iter(eval_dataloader)))
 
 """

@@ -19,7 +19,6 @@ pip install -r requirements.txt
 ### Setting hyperparameters
 Set the hyperparameters for this demo. If you're running this example in 
 a Jupyter notebook and wish to modify them, re-run all the cells below.
-For further reading on hyperparameters, see [Hyperparameters (machine learning)](https://en.wikipedia.org/wiki/Hyperparameter_(machine_learning))
 
 
 ```python
@@ -309,7 +308,7 @@ Finally the accuracy on the test set is:
 print("Accuracy on test set: {:0.2f}%".format(sum_acc / len(test_data)))
 ```
 
-    Accuracy on test set: 99.18%
+    Accuracy on test set: 99.29%
 
 
 Release resources:

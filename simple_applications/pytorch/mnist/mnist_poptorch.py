@@ -26,7 +26,6 @@ pip install -r requirements.txt
 ### Setting hyperparameters
 Set the hyperparameters for this demo. If you're running this example in 
 a Jupyter notebook and wish to modify them, re-run all the cells below.
-For further reading on hyperparameters, see [Hyperparameters (machine learning)](https://en.wikipedia.org/wiki/Hyperparameter_(machine_learning))
 """
 # Learning rate.
 learning_rate = 0.03

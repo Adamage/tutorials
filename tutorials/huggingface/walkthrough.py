@@ -5,7 +5,7 @@ Version 2.0
 """
 # Fine-tuning a pretrained transformer
 This tutorial demonstrates how to fine-tune a pretrained model from the 
-transformers library using IPUs. Tt is based on [Fine-tuning a pretrained model](https://huggingface.co/transformers/training.html).
+transformers library using IPUs. It is based on [Fine-tuning a pretrained model](https://huggingface.co/transformers/training.html).
 """
 """
 ### Environment preparation
@@ -21,8 +21,8 @@ pip install -r requirements.txt
 """
 ### Preparing the datasets
 
-We use the IMDB dataset containing movie reviews together with information on 
-whether the review is positive or negative as our data. To load the data we 
+We use the IMDB dataset as our data. It contains movie reviews together with 
+information on whether the review is positive or negative. To load the data we 
 use the datasets library.
 """
 

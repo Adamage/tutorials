@@ -1,5 +1,6 @@
 # © Copyright 2020, The Hugging Face Team, Licenced under the Apache License,
 # Version 2.0
+# © Copyright 2020 Graphcore Ltd. All rights reserved.
 from datasets import load_dataset
 
 raw_datasets = load_dataset("imdb")
@@ -18,16 +19,12 @@ def tokenize_function(examples):
 tokenized_datasets = raw_datasets.map(tokenize_function,
                                       remove_columns=['text'])
 
-train_dataset = tokenized_datasets["train"].shuffle(seed=42)
-eval_dataset = tokenized_datasets["test"].shuffle(seed=42)
+tokenized_datasets.set_format(type='torch')
 
-train_dataset = train_dataset.rename_column(original_column_name='label',
-                                            new_column_name='labels')
-eval_dataset = eval_dataset.rename_column(original_column_name='label',
-                                          new_column_name='labels')
-
-train_dataset.set_format(type='torch')
-eval_dataset.set_format(type='torch')
+train_dataset = tokenized_datasets["train"].rename_column(
+    original_column_name='label', new_column_name='labels')
+eval_dataset = tokenized_datasets["test"].rename_column(
+    original_column_name='label', new_column_name='labels')
 
 import poptorch
 
@@ -59,9 +56,8 @@ optimizer = AdamW(model.parameters(), lr=1e-6)
 model.electra.embeddings = poptorch.BeginBlock(
     model.electra.embeddings, "Embedding", ipu_id=0
 )
-
-for index, layer in enumerate(model.electra.encoder.layer):
-    ipu_id = index // 4 + 1
+ipu_ids = [1] * 4 + [2] * 4 + [3] * 4
+for index, (layer, ipu_id) in enumerate(zip(model.electra.encoder.layer, ipu_ids)):
     model.electra.encoder.layer[index] = poptorch.BeginBlock(
         layer, f"Encoder{index}", ipu_id=ipu_id
     )
@@ -130,10 +126,10 @@ def val_epoch():
 
     y_pred, y_true = [], []
     for batch in eval_dataloader:
-        y_true.extend(batch['labels'].tolist())
         loss, logits = inferenceModel(**batch)
 
         y_pred += logits.argmax(dim=1).tolist()
+        y_true.extend(batch['labels'].tolist())
         progress_bar.update(1)
 
     acc = accuracy_score(y_true, y_pred)

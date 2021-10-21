@@ -2,7 +2,7 @@
 This tutorial demonstrates how to fine-tune a pretrained model from the 
 transformers library using IPUs. It is based on [Fine-tuning a pretrained model](https://huggingface.co/transformers/training.html).
 
-### Environment preparation
+## Environment preparation
 Install the Poplar SDK following the instructions in the [Getting Started](https://docs.graphcore.ai/en/latest/software.html#getting-started)
 guide for your IPU system. Make sure to run the enable.sh scripts for Poplar 
 and PopART and activate a Python3 virtualenv with PopTorch installed.
@@ -12,7 +12,7 @@ Then install the package requirements:
 pip install -r requirements.txt 
 ```
 
-### Preparing the datasets
+## Preparing the datasets
 
 We use the IMDB dataset as our data. It contains movie reviews together with 
 information on whether the review is positive or negative. To load the data we 
@@ -45,8 +45,10 @@ The text must be transformed into a form understandable by the model.
 For this purpose, we create a function responsible for tokenization, which 
 takes as input a batch from the dataset and returns a tokenized examples.
 Note, that we set `max_length` and `truncation` parameters, which ensures 
-that all examples have the same length. Moreover, we remove the `text` field,
-because it is not accepted as input to the model.
+that all examples have the same length. More detailed description can be found
+in the [preprocessing data](https://huggingface.co/transformers/preprocessing.html#everything-you-always-wanted-to-know-about-padding-and-truncation). 
+Moreover, we remove the `text` field, because it is not accepted as input to 
+the model.
 
 We used ELECTRA as our model. It is an extension of BERT which 
 is characterised by a shorter training time and therefore fits well into the 
@@ -74,16 +76,12 @@ the data to be stored in tensors.
 
 
 ```python
-train_dataset = tokenized_datasets["train"].shuffle(seed=42)
-eval_dataset = tokenized_datasets["test"].shuffle(seed=42)
+tokenized_datasets.set_format(type='torch')
 
-train_dataset = train_dataset.rename_column(original_column_name='label',
-                                            new_column_name='labels')
-eval_dataset = eval_dataset.rename_column(original_column_name='label',
-                                          new_column_name='labels')
-
-train_dataset.set_format(type='torch')
-eval_dataset.set_format(type='torch')
+train_dataset = tokenized_datasets["train"].rename_column(
+    original_column_name='label', new_column_name='labels')
+eval_dataset = tokenized_datasets["test"].rename_column(
+    original_column_name='label', new_column_name='labels')
 ```
 
 Next, when the datasets are ready we proceed to create the dataloaders. 
@@ -134,11 +132,11 @@ performance, due to the overhead of transferring more data to the host machine.
 
 The full list of options is available in the [documentation](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/overview.html#options).
 
-### Preparing the model
+## Preparing the model
 
 Next, load the pretrained model and initialize the optimizer. Note that 
 we use `poptorch.optim.AdamW`, which is optimised for distributed training.
-More optimizers can be [here](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/reference.html#optimizers).
+More optimizers can be found [here](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/reference.html#optimizers).
 
 
 ```python
@@ -170,9 +168,8 @@ and the device ID on which the layer should be placed.
 model.electra.embeddings = poptorch.BeginBlock(
     model.electra.embeddings, "Embedding", ipu_id=0
 )
-
-for index, layer in enumerate(model.electra.encoder.layer):
-    ipu_id = index // 4 + 1
+ipu_ids = [1] * 4 + [2] * 4 + [3] * 4
+for index, (layer, ipu_id) in enumerate(zip(model.electra.encoder.layer, ipu_ids)):
     model.electra.encoder.layer[index] = poptorch.BeginBlock(
         layer, f"Encoder{index}", ipu_id=ipu_id
     )
@@ -190,7 +187,8 @@ Due to the fact that we can not directly modify the model class, we create
 a class that takes our ELECTRA model as a parameter and overload the `forward` 
 function, in which we call the `forward` function from ELECTRA and then wrap 
 the returned loss in `identity_loss`. Here we use the composition, however, 
-this task could be solved using inheritance.
+this task could be solved using inheritance from the Electra class in 
+transformers package.
 
 
 ```python
@@ -229,8 +227,8 @@ device. We would like to use only one model (for the training or the inference)
 on the device at a time, as this will allow us to use a larger model. Therefore, 
 we call `detachFromDevice` to detach the model from the IPU device.
 
-Compilation may take a few minutes. More information about the wrapping function 
-can be found in the [documentation](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/reference.html#model-wrapping-functions).
+Compilation may take a few minutes when using 4 devices. More information about 
+the wrapping function can be found in the [documentation](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/reference.html#model-wrapping-functions).
 
 
 ```python
@@ -250,12 +248,12 @@ inferenceModel.compile(**next(iter(eval_dataloader)))
 inferenceModel.detachFromDevice()
 ```
 
-### Training and validating the model
+## Training and validating the model
 
 Our model and data are ready to run on IPU. We proceed to implement the 
 function responsible for training the model. Here we set the model into the 
 training state, and add a progress bar. We do not need to include 
-`loss.backward()` as `poptorch.trainingModel` does this itself.
+`loss.backward()` as `poptorch.trainingModel` does this itself. 
 
 At the beginning of our method, we attach the model to the IPU using the 
 `attachToDevice` method, and at the end we detach it using `detachFromDevice`. 
@@ -302,10 +300,10 @@ def val_epoch():
 
     y_pred, y_true = [], []
     for batch in eval_dataloader:
-        y_true.extend(batch['labels'].tolist())
         loss, logits = inferenceModel(**batch)
 
         y_pred += logits.argmax(dim=1).tolist()
+        y_true.extend(batch['labels'].tolist())
         progress_bar.update(1)
 
     acc = accuracy_score(y_true, y_pred)
@@ -324,15 +322,16 @@ for epoch in range(epochs):
     val_epoch()
 ```
 
-    Accuracy: 0.901
+    Accuracy: 0.897
 
 
-    Accuracy: 0.913
+    Accuracy: 0.907
 
 
-    Accuracy: 0.919
+    Accuracy: 0.915
 
 
 To sum up, in this tutorial, we have successfully fine-tuned a model from 
 HuggingFace for sentiment prediction using IPU devices. If you are interested 
-in other tutorials you are encouraged to check out [Graphcore Tutorials](https://github.com/graphcore/tutorials).
+in other tutorials you are encouraged to check out [Graphcore Tutorials](https://github.com/graphcore/tutorials),
+and for more advanced example can be found in [BERT example](https://github.com/graphcore/examples/tree/master/applications/pytorch/bert).

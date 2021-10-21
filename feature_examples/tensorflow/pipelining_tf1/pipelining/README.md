@@ -367,7 +367,7 @@ def train():
         print("Elapsed {:.2f}, {:.2f} samples/sec".format(elapsed,
                                                           samples_per_second))
 
-
+print("Starting training for Stage 1 - Single IPU")
 train()
 print("Stage 1 ran successfully")
 ```
@@ -528,6 +528,7 @@ outfeed_op = outfeed_queue.dequeue()
 ipu.utils.move_variable_initialization_to_cpu()
 init_op = tf.global_variables_initializer()
 
+print("Starting training for Stage 2 - Sharding")
 train()
 print("Stage 2 ran successfully")
 ```
@@ -1001,6 +1002,7 @@ $ python3 step3_pipelining.py
 
 
 ```python
+print("Starting training for Stage 3 - Pipelining")
 train()
 print("Stage 3 ran successfully")
 ```
@@ -1058,9 +1060,8 @@ Also, note:
 
 * Although pipelining is better than sharding, the overheads from data exchange
   between IPUs still have an impact.
-* The number of IPUs in a multi-IPU device must be a power of 2. For example,
-  if you try to select 3 IPUs to run 3 stages then you will see an
-  error: `Unsupported number of IPUs requested - could not find an IPU device with 3 IPUs`.
+* Stage count has to be a power of 2 if mapping each stage to a unique IPU 
+(since we can only acquire IPUs in powers of 2).
 
 During the development and tuning of your pipelined model, the general aim is
 to balance the execution cycles across all the IPUs in the main phase, so that
@@ -1106,9 +1107,10 @@ count and the stages. It is easier to experiment with these options if they can
 be configured from the command line.
 
 Batch size and gradient accumulation count are already configurable from the
-command line (`--batch-size`, `--batches-to-accumulate`) in scripts or from
-the cell at top of this notebook. But the 'stages' are currently hardcoded by 
-the series of 'stageN' functions defined locally in `pipelined_model`.
+command line (`--batch-size`, `--batches-to-accumulate`) in scripts or from 
+the hyperparameter code cell at the top of this file. But the 'stages' are 
+currently hardcoded by the series of 'stageN' functions defined locally in 
+`pipelined_model`.
 
 In this next step we will add code to support run-time configurable stages.
 There are many ways this could be implemented, but we only demonstrate one
@@ -1119,11 +1121,11 @@ method here.
 Add a new variable `SPLITS` with which you can specify the points
 to 'split' the model.
 
-This should take multiple string arguments where each argument defines the
-split point. This is the layer that will be assigned to the *next* stage. The
-implication is that for N `--split` arguments the model will run on N+1 stages
-and IPUs. Let's assume that will create a model_layers dictionary from which we
-can generate a list of layer ids.
+This array should take multiple strings, where each string defines the split 
+point. This is the layer that will be assigned to the *next* stage. The
+implication is that for `N` `SPLIT` values, the model will run on N+1 stages
+and IPUs (if each stage is mapped to a unique IPU). Let's assume that will 
+create a model_layers dictionary from which we can generate a list of layer ids.
 
 
 ```python
@@ -1315,7 +1317,8 @@ if (len(stages) != len(SPLITS) + 1):
     print("Unexpected stage count - check splits are valid")
 ```
 
-Note, stage count has to be power of 2.
+Note, stage count has to be a power of 2 if mapping each stage to a unique IPU 
+(since we can only acquire IPUs in powers of 2).
 
 
 ```python
@@ -1389,6 +1392,7 @@ $ python3 step4_configurable_stages.py
 
 
 ```python
+print("Starting training for Stage 4 - Run-time Configurable Stages")
 train()
 print("Stage 4 ran successfully")
 ```

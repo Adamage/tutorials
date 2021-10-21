@@ -12,9 +12,9 @@ relevant to other frameworks.
 """
 """
 Requirements:
-   - A Poplar SDK environment enabled (see [Installation](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/installation.html) of the PopTorch User Guide)
-   guide for your IPU system)
-   - The PopTorch Python library installed
+   - A Poplar SDK environment enabled (see the [Getting Started](https://docs.graphcore.ai/en/latest/software.html#getting-started)
+   guide for your IPU system) 
+   - The PopTorch Python library installed (see [Installation](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/installation.html) of the PopTorch User Guide)
    - `pip install torchvision`
 """
 """
@@ -34,7 +34,7 @@ specific to the IPU:
 See the [documentation](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/batching.html#poptorch-asynchronousdataaccessor)
 about asynchronous mode.
 
-Let’s reuse the model from [the introductory tutorial on PopTorch](https://github.com/graphcore/tutorials/tree/sdk-release-2.2/tutorials/pytorch/tut1_basics) 
+Let's reuse the model from [the introductory tutorial on PopTorch](https://github.com/graphcore/tutorials/tree/sdk-release-2.2/tutorials/pytorch/tut1_basics) 
 and make a random dataset to play with the different IPU parameters.
 
 We will start by importing the necessary libraries:
@@ -44,7 +44,42 @@ import time
 import poptorch
 import torch
 import torch.nn as nn
+from sys import exit
 
+"""
+**The following cell is only necessary to prevent errors when running the 
+source file as a script. If you're reading this in a Jupyter notebook, 
+there is no need to run the next cell:**
+"""
+
+
+def is_interactive():
+    import __main__ as main
+    return not hasattr(main, '__file__')
+
+
+if __name__ == "__main__" and not is_interactive():
+    print("This tutorial has been designed to run in a Jupyter notebook. "
+          "If you would like to run it as a Python script, please "
+          "use tuto_data_loading.py instead. This is required due to Python "
+          "process spawning issues when using asynchronous data loading, "
+          "as detailed in the README.")
+    exit(0)
+"""
+>**Note**: executing the code in a python script requires this conditional block:
+>```python
+>if __name__ == '__main__':
+>```
+>This is necessary to avoid [issues with asynchronous DataLoader](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/batching.html#poptorch-asynchronousdataaccessor)
+The asynchronous dataloader calls the spawn method, which creates a new python 
+interpreter. This interpreter will import the main module of the application. 
+Therefore, we need protection against infinite spawning of new processes and 
+repeated, undesirable code invocations. Therefore, the entire executable part 
+of the script should be in an if block. Function and class definitions do not 
+have to be in this block. This change does not apply to interactive python 
+Interpreters (e.g. Jupyter notebooks) which support multiprocessing in a 
+different way. Additionally the dataset must be serializable by pickle.
+"""
 """
 Now we will define some global variables that are used later. If you change 
 any of these values then you should re-run all the cells below:
@@ -98,28 +133,14 @@ processing time.
 features = torch.randn([10000, 1, 128, 128])
 labels = torch.empty([10000], dtype=torch.long).random_(10)
 dataset = torch.utils.data.TensorDataset(features, labels)
-"""
->**Note**: executing the code in a python script requires this conditional block:
->```python
->if __name__ == '__main__':
->```
->This is necessary to avoid [issues with asynchronous DataLoader](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/batching.html#poptorch-asynchronousdataaccessor)
-The asynchronous dataloader calls the spawn method, which creates a new python 
-interpreter. This interpreter will import the main module of the application. 
-Therefore, we need protection against infinite spawning of new processes and 
-repeated, undesirable code invocations. Therefore, the entire executable part 
-of the script should be in an if block. Function and class definitions do not 
-have to be in this block. This change does not apply to interactive python 
-Interpreters (e.g. Jupyter notebooks) which support multiprocessing in a 
-different way. Additionally the dataset must be serializable by pickle.
-"""
+
 """
 In tutorial 1 we used images from the MNIST dataset with a size of 28x28, now
 we will use larger images (128x128) to simulate a heavier data load.
 This change affects the input size of the layer `fc1` which we change from  
 `self.fc1 = nn.Linear(972, 100)` to `self.fc1 = nn.Linear(41772, 100)`. 
 
-Let’s set up a PopTorch DataLoader in asynchronous mode.
+Let's set up a PopTorch DataLoader in asynchronous mode.
 """
 training_data = poptorch.DataLoader(
     opts,
@@ -519,7 +540,7 @@ copies on the IPU. It also excludes the synchronisation time with the host.
 """
 ### Case 2: Larger global batch size with replication
 
-Let’s try to get better training performances by increasing the global batch size.
+Let's try to get better training performances by increasing the global batch size.
 We can choose to increase the replication factor so it avoids loading more data 
 at a time on a single IPU.
 

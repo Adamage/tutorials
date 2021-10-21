@@ -6,9 +6,9 @@ This will also cover the more general notion of batching on IPUs that is also
 relevant to other frameworks.
 
 Requirements:
-   - A Poplar SDK environment enabled (see [Installation](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/installation.html) of the PopTorch User Guide)
-   guide for your IPU system)
-   - The PopTorch Python library installed
+   - A Poplar SDK environment enabled (see the [Getting Started](https://docs.graphcore.ai/en/latest/software.html#getting-started)
+   guide for your IPU system) 
+   - The PopTorch Python library installed (see [Installation](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/installation.html) of the PopTorch User Guide)
    - `pip install torchvision`
 
 ##	PyTorch and PopTorch DataLoader
@@ -26,7 +26,7 @@ specific to the IPU:
 See the [documentation](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/batching.html#poptorch-asynchronousdataaccessor)
 about asynchronous mode.
 
-Let’s reuse the model from [the introductory tutorial on PopTorch](https://github.com/graphcore/tutorials/tree/sdk-release-2.2/tutorials/pytorch/tut1_basics) 
+Let's reuse the model from [the introductory tutorial on PopTorch](https://github.com/graphcore/tutorials/tree/sdk-release-2.2/tutorials/pytorch/tut1_basics) 
 and make a random dataset to play with the different IPU parameters.
 
 We will start by importing the necessary libraries:
@@ -38,7 +38,42 @@ import time
 import poptorch
 import torch
 import torch.nn as nn
+from sys import exit
 ```
+
+**The following cell is only necessary to prevent errors when running the 
+source file as a script. If you're reading this in a Jupyter notebook, 
+there is no need to run the next cell:**
+
+
+```python
+def is_interactive():
+    import __main__ as main
+    return not hasattr(main, '__file__')
+
+
+if __name__ == "__main__" and not is_interactive():
+    print("This tutorial has been designed to run in a Jupyter notebook. "
+          "If you would like to run it as a Python script, please "
+          "use tuto_data_loading.py instead. This is required due to Python "
+          "process spawning issues when using asynchronous data loading, "
+          "as detailed in the README.")
+    exit(0)
+```
+
+>**Note**: executing the code in a python script requires this conditional block:
+>```python
+>if __name__ == '__main__':
+>```
+>This is necessary to avoid [issues with asynchronous DataLoader](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/batching.html#poptorch-asynchronousdataaccessor)
+The asynchronous dataloader calls the spawn method, which creates a new python 
+interpreter. This interpreter will import the main module of the application. 
+Therefore, we need protection against infinite spawning of new processes and 
+repeated, undesirable code invocations. Therefore, the entire executable part 
+of the script should be in an if block. Function and class definitions do not 
+have to be in this block. This change does not apply to interactive python 
+Interpreters (e.g. Jupyter notebooks) which support multiprocessing in a 
+different way. Additionally the dataset must be serializable by pickle.
 
 Now we will define some global variables that are used later. If you change 
 any of these values then you should re-run all the cells below:
@@ -101,26 +136,12 @@ labels = torch.empty([10000], dtype=torch.long).random_(10)
 dataset = torch.utils.data.TensorDataset(features, labels)
 ```
 
->**Note**: executing the code in a python script requires this conditional block:
->```python
->if __name__ == '__main__':
->```
->This is necessary to avoid [issues with asynchronous DataLoader](https://docs.graphcore.ai/projects/poptorch-user-guide/en/latest/batching.html#poptorch-asynchronousdataaccessor)
-The asynchronous dataloader calls the spawn method, which creates a new python 
-interpreter. This interpreter will import the main module of the application. 
-Therefore, we need protection against infinite spawning of new processes and 
-repeated, undesirable code invocations. Therefore, the entire executable part 
-of the script should be in an if block. Function and class definitions do not 
-have to be in this block. This change does not apply to interactive python 
-Interpreters (e.g. Jupyter notebooks) which support multiprocessing in a 
-different way. Additionally the dataset must be serializable by pickle.
-
 In tutorial 1 we used images from the MNIST dataset with a size of 28x28, now
 we will use larger images (128x128) to simulate a heavier data load.
 This change affects the input size of the layer `fc1` which we change from  
 `self.fc1 = nn.Linear(972, 100)` to `self.fc1 = nn.Linear(41772, 100)`. 
 
-Let’s set up a PopTorch DataLoader in asynchronous mode.
+Let's set up a PopTorch DataLoader in asynchronous mode.
 
 
 ```python
@@ -269,8 +290,8 @@ print(f"DataLoader throughput: {items_per_second:.2f} items/s")
 training_data.terminate()
 ```
 
-    Total execution time: 0.20 s
-    DataLoader throughput: 47525.56 items/s
+    Total execution time: 0.22 s
+    DataLoader throughput: 43888.58 items/s
 
 
 >***Note about releasing resources***:
@@ -353,10 +374,8 @@ training_data.terminate()
 ```
 
     Evaluating: 12 steps of 800 items
-
-
     Total execution time: 0.28 s
-    IPU throughput: 34124.13 items/s
+    IPU throughput: 33912.41 items/s
 
 
 ### What if the DataLoader throughput is too low?
@@ -500,11 +519,11 @@ validate_model_performance(dataset, batch_size=16, replicas=1,
                            synthetic_data=True)
 ```
 
-    DataLoader: 49031.46 items/s
-    Dataloader execution time: 0.20 s
+    DataLoader: 42560.43 items/s
+    Dataloader execution time: 0.23 s
 
 
-    IPU throughput: 34510.81 items/s
+    IPU throughput: 34468.15 items/s
     Dataloader with IPU training execution time: 0.28 s
 
 
@@ -517,12 +536,12 @@ validate_model_performance(dataset, batch_size=16, replicas=1,
                            synthetic_data=False)
 ```
 
-    DataLoader: 42994.94 items/s
-    Dataloader execution time: 0.22 s
+    DataLoader: 44682.89 items/s
+    Dataloader execution time: 0.21 s
 
 
-    IPU throughput: 22017.50 items/s
-    Dataloader with IPU training execution time: 0.44 s
+    IPU throughput: 25168.78 items/s
+    Dataloader with IPU training execution time: 0.38 s
 
 
 From the tests you should be able to see that the throughput with processing 
@@ -536,7 +555,7 @@ copies on the IPU. It also excludes the synchronisation time with the host.
 
 ### Case 2: Larger global batch size with replication
 
-Let’s try to get better training performances by increasing the global batch size.
+Let's try to get better training performances by increasing the global batch size.
 We can choose to increase the replication factor so it avoids loading more data 
 at a time on a single IPU.
 
@@ -554,9 +573,9 @@ validate_model_performance(dataset, batch_size=16, replicas=4,
                            synthetic_data=True)
 ```
 
-    DataLoader: 98390.24 items/s
-    Dataloader execution time: 0.10 s
-    IPU throughput: 136481.50 items/s
+    DataLoader: 110210.86 items/s
+    Dataloader execution time: 0.09 s
+    IPU throughput: 136323.93 items/s
     Dataloader with IPU training execution time: 0.07 s
 
 
@@ -569,12 +588,12 @@ validate_model_performance(dataset, batch_size=16, replicas=4,
                            synthetic_data=False)
 ```
 
-    DataLoader: 516546.53 items/s
-    Dataloader execution time: 0.02 s
+    DataLoader: 132185.16 items/s
+    Dataloader execution time: 0.07 s
 
 
-    IPU throughput: 34661.19 items/s
-    Dataloader with IPU training execution time: 0.28 s
+    IPU throughput: 35749.26 items/s
+    Dataloader with IPU training execution time: 0.27 s
 
 
 Throughput of dataloader for synthetic and real data should be roughly the 

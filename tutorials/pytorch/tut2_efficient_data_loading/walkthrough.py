@@ -47,9 +47,9 @@ import torch.nn as nn
 from sys import exit
 
 """
-**The following cell is only necessary to prevent errors when running the 
+The following cell is only necessary to prevent errors when running the 
 source file as a script. If you're reading this in a Jupyter notebook, 
-there is no need to run the next cell:**
+there is no need to run the next cell:
 """
 
 
@@ -325,7 +325,8 @@ serially.
 >***Note for IPU benchmarking***:
 >The warmup time can be avoided by calling `training_model.compile(data, labels)` 
 before any other call to the model. If not, the first call will include the 
-compilation time.
+compilation time, which can take few minutes.
+
 >```python
 ># Warmup
 >print("Compiling + Warmup ...")
@@ -456,7 +457,6 @@ uncomplete batches will be discarded.
 We invite you to try these different sets of parameters to assess their effect. 
 We included the throughput we obtained for illustration but it may vary 
 depending on your configuration.  
->*Note: Compilation can take few minutes.*
 
 We will create a function that uses the previous code and validates the 
 performance of our model 

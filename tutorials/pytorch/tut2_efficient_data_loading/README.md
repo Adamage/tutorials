@@ -41,9 +41,9 @@ import torch.nn as nn
 from sys import exit
 ```
 
-**The following cell is only necessary to prevent errors when running the 
+The following cell is only necessary to prevent errors when running the 
 source file as a script. If you're reading this in a Jupyter notebook, 
-there is no need to run the next cell:**
+there is no need to run the next cell:
 
 
 ```python
@@ -291,7 +291,7 @@ training_data.terminate()
 ```
 
     Total execution time: 0.22 s
-    DataLoader throughput: 43888.58 items/s
+    DataLoader throughput: 43973.61 items/s
 
 
 >***Note about releasing resources***:
@@ -326,7 +326,8 @@ serially.
 >***Note for IPU benchmarking***:
 >The warmup time can be avoided by calling `training_model.compile(data, labels)` 
 before any other call to the model. If not, the first call will include the 
-compilation time.
+compilation time, which can take few minutes.
+
 >```python
 ># Warmup
 >print("Compiling + Warmup ...")
@@ -374,8 +375,8 @@ training_data.terminate()
 ```
 
     Evaluating: 12 steps of 800 items
-    Total execution time: 0.28 s
-    IPU throughput: 33912.41 items/s
+    Total execution time: 0.29 s
+    IPU throughput: 32958.76 items/s
 
 
 ### What if the DataLoader throughput is too low?
@@ -453,7 +454,6 @@ uncomplete batches will be discarded.
 We invite you to try these different sets of parameters to assess their effect. 
 We included the throughput we obtained for illustration but it may vary 
 depending on your configuration.  
->*Note: Compilation can take few minutes.*
 
 We will create a function that uses the previous code and validates the 
 performance of our model 
@@ -519,11 +519,11 @@ validate_model_performance(dataset, batch_size=16, replicas=1,
                            synthetic_data=True)
 ```
 
-    DataLoader: 42560.43 items/s
-    Dataloader execution time: 0.23 s
+    DataLoader: 44648.90 items/s
+    Dataloader execution time: 0.22 s
 
 
-    IPU throughput: 34468.15 items/s
+    IPU throughput: 34144.82 items/s
     Dataloader with IPU training execution time: 0.28 s
 
 
@@ -536,12 +536,12 @@ validate_model_performance(dataset, batch_size=16, replicas=1,
                            synthetic_data=False)
 ```
 
-    DataLoader: 44682.89 items/s
-    Dataloader execution time: 0.21 s
+    DataLoader: 47129.88 items/s
+    Dataloader execution time: 0.20 s
 
 
-    IPU throughput: 25168.78 items/s
-    Dataloader with IPU training execution time: 0.38 s
+    IPU throughput: 24665.35 items/s
+    Dataloader with IPU training execution time: 0.39 s
 
 
 From the tests you should be able to see that the throughput with processing 
@@ -573,9 +573,9 @@ validate_model_performance(dataset, batch_size=16, replicas=4,
                            synthetic_data=True)
 ```
 
-    DataLoader: 110210.86 items/s
-    Dataloader execution time: 0.09 s
-    IPU throughput: 136323.93 items/s
+    DataLoader: 98659.52 items/s
+    Dataloader execution time: 0.10 s
+    IPU throughput: 135621.87 items/s
     Dataloader with IPU training execution time: 0.07 s
 
 
@@ -588,12 +588,12 @@ validate_model_performance(dataset, batch_size=16, replicas=4,
                            synthetic_data=False)
 ```
 
-    DataLoader: 132185.16 items/s
+    DataLoader: 136801.45 items/s
     Dataloader execution time: 0.07 s
 
 
-    IPU throughput: 35749.26 items/s
-    Dataloader with IPU training execution time: 0.27 s
+    IPU throughput: 36451.37 items/s
+    Dataloader with IPU training execution time: 0.26 s
 
 
 Throughput of dataloader for synthetic and real data should be roughly the 

@@ -4,6 +4,84 @@ In this tutorial you will train a selection of simple fully connected models
 on the MNIST numeral data set and see how training can be parallelised over
 multiple IPU devices.
 
+## Model Parallelism With Pipelining
+
+With pipelining, as with sharding, the model is split into stages where each
+stage can fit and be run on a single IPU. However, unlike sharding, the compute
+for separate batches is overlapped so that execution of the model
+is parallelised. That is, each stage (part of the original model) is executed
+on its IPU while the IPUs allocated to previous stages are already working on
+subsequent batches. This provides improved utilisation compared to sharding.
+
+![Pipelining outline](static/pipelining_outline.png)
+
+Refer to the technical note on TensorFlow Model Parallelism for full details:
+[TensorFlow Model Parallelism - Pipelining](<https://docs.graphcore.ai/projects/tf-model-parallelism/en/latest/pipelining.html#pipelining>)/
+
+Pipelining provides a method to run larger models that is conceptually less
+straightforward compared to sharding. However, it offers better utilisation of
+the allocated IPU resource and, for this reason, pipelining is recommended
+where performance is critical.
+This tutorial focuses on how to apply pipelining in TensorFlow 1.
+
+### Pipeline Execution Phases
+It is important to understand the key phases of pipeline execution:
+
+1. Ramp up -  the pipeline is being filled; work is flowing into each stage 
+until all stages are filled (all IPUs are busy).
+2. Main execution - all stages are filled and IPU utilisation is maximised.
+3. Ramp down - the pipeline is being drained; work is flowing out of each stage 
+until all stages are empty (no IPUs are busy).
+4. Weight updates - all pipeline batches have been processed, so accumulated 
+gradients can be processed (gradient descent) and weights updated.
+Note:  
+* Each individual batch passed through the pipeline is called a **mini-batch**.  
+* Weights are updated only once a set of mini-batches has been fully processed.  
+* Gradients are accumulated across a set of mini-batches.  
+* Weight updates are applied once all the complete set of mini-batches are 
+processed.  
+
+In short, pipelining enforces **gradient accumulation** where:  
+`effective batch size = mini-batch size * gradient accumulation count`  
+Performing gradient accumulation is still valid because summing the gradients 
+across all the examples in a batch immediately and accumulating them over 
+several steps are equivalent.  
+Increasing the gradient accumulation count has these benefits:
+1. A smaller proportion of time is spent in the ramp up and ramp down - that is, 
+more time is spent in the main execution phase where maximum utilisation of the 
+IPUs is made.
+2. Fewer overall weight updates are made, which saves compute time.
+Here is the pipeline outline extended to show the progress of 16 mini-batches 
+followed by a weight update. Notice that the best utilization of the IPUs is 
+during the main phase and that this is sustained until the last mini-batch enters 
+the pipeline, following which the ramp down begins. Also notice that weight 
+updates are only applied once, following the ramp down (after the pipeline has 
+been drained of all mini-batches).
+
+## Pipelining Schedules
+
+In this tutorial, we will create models using the Keras Model class and IPU 
+pipelining features. We are going to use Pipeline Stages to assign operations
+to devices and to configure parallelism.
+
+In the following graphics, FWD and BWD refer to forward and backward passes.
+
+The computational stages can be interleaved on the devices in three different 
+ways as described by the `pipeline_schedule` parameter. By default the API 
+will use the `PipelineSchedule.Grouped` mode, where the forward passes are 
+grouped together, and the backward passes are grouped together. 
+![Grouped pipeline](static/grouped_pipeline.png)
+
+The main alternative is the `PipelineSchedule.Interleaved` mode, where the 
+forward and backward passes are interleaved, so that fewer activations need 
+to be stored. 
+![Interleaved pipeline](static/interleaved_pipeline.png)
+
+Additionally, the `PipelineSchedule.Sequential` mode, where the pipeline is 
+scheduled in the same way as if it were a sharded model, may be useful when 
+debugging your model.
+![Sharded pipeline](static/sharded_pipeline.png)
+
 ## Upgrading to TensorFlow 2
 
 Considering that IPU computation can be enabled on both TensorFlow 1 
@@ -12,7 +90,7 @@ and how it affects implementation of IPU specific code.
 
 ### Device scopes
 In IPU APIs for TF2, the scope context `ipu.scopes.ipu_scope(device_id)` was
-replaced with a strategy context `ipu.ipu_strategy.IPUStrategy().scope().
+replaced with a strategy context `ipu.ipu_strategy.IPUStrategy().scope()`.
 
 ### Training loop
 Since TF2 moved in the direction of eager execution, we no longer are required
@@ -33,33 +111,11 @@ versions of TensorFlow library, which you can study [here](https://www.tensorflo
 
 A very exhaustive comparison of both versions can be found [here](https://www.tensorflow.org/guide/migrate/tf1_vs_tf2).
 
-## Pipelining features
-In this tutorial, we will create models using the Keras Model class and IPU 
-pipelining features.
+## Tutorial Walkthrough
 
-We are going to use Pipeline Stages to assign operations to devices and to
-configure parallelism.
-
-In the following graphics, FWD and BWD refer to forward and backward passes.
-
-The computational stages can be interleaved on the devices in three different 
-ways as described by the `pipeline_schedule` parameter. By default the API 
-will use the `PipelineSchedule.Grouped` mode, where the forward passes are 
-grouped together, and the backward passes are grouped together. 
-![Grouped pipeline](static/grouped_pipeline.png)
-
-The main alternative is the `PipelineSchedule.Interleaved` mode, where the 
-forward and backward passes are interleaved, so that fewer activations need 
-to be stored. 
-![Interleaved pipeline](static/interleaved_pipeline.png)
-
-Additionally, the `PipelineSchedule.Sequential` mode, where the pipeline is 
-scheduled in the same way as if it were a sharded model, may be useful when 
-debugging your model.
-![Sharded pipeline](static/sharded_pipeline.png)
-
-This cell contains the constants applied to the whole tutorial. When modifying
-these, make sure all the cells below are re-run (including this one).
+This cell contains the constants applied to the whole tutorial. When running
+this tutorial in a Jupyter Notebook, make sure all the cells below 
+are re-run (including this one).
 
 
 ```python
@@ -131,11 +187,16 @@ def create_dataset(batch_size: int, repeat=True):
 train_ds = create_dataset(batch_size=BATCH_SIZE)
 ```
 
-Initialise IPU configuration - more details here [`IPUConfig`](https://docs.graphcore.ai/projects/tensorflow-user-guide/en/latest/api.html#tensorflow.python.ipu.config.IPUConfig).
+Initialise the IPU configuration - more details can be found in `IPUConfig`
+[documentation](https://docs.graphcore.ai/projects/tensorflow-user-guide/en/latest/api.html#tensorflow.python.ipu.config.IPUConfig).
+Creating new instance of `IPUConfig` and running `configure_ipu_system` always
+reattaches the devices, freeing the resources if they were occupied by this
+process. It is important when a Jupyter Notebook is used and the kernel
+is still running, and it does not release IPU devices automatically.
 
 
 ```python
-def make_ipu_config(
+def configure_ipus(
         num_ipus: int,
         selection_order: Optional[ipu.utils.SelectionOrder] = None
 ) -> ipu.config.IPUConfig:
@@ -147,7 +208,6 @@ def make_ipu_config(
         ipu_configuration.selection_order = selection_order
 
     ipu_configuration.configure_ipu_system()
-    return ipu_configuration
 ```
 
 This will be the training function reused by all the kinds of models and modes
@@ -225,7 +285,7 @@ before training.
 
 
 ```python
-ipu_configuration = make_ipu_config(num_ipus=1)
+configure_ipus(num_ipus=1)
 
 train(
     strategy=ipu.ipu_strategy.IPUStrategy(),
@@ -265,7 +325,7 @@ Next we refresh IPU device configuration and train again with the new model.
 
 
 ```python
-ipu_configuration = make_ipu_config(num_ipus=1)
+configure_ipus(num_ipus=1)
 
 train(
     strategy=ipu.ipu_strategy.IPUStrategy(),
@@ -322,7 +382,7 @@ Next we refresh IPU device configuration and train again with the new model.
 
 
 ```python
-ipu_configuration = make_ipu_config(num_ipus=2)
+configure_ipus(num_ipus=2)
 
 train(
     strategy=ipu.ipu_strategy.IPUStrategy(),
@@ -344,7 +404,7 @@ which is used to create a model-parallel execution when calling `fit()`,
 >This pipelining stage assignment is ignored when using the `call()` function
 >on this model.
 
-Below you will see pipeline stage assignment like this: `[0, 0, 1, 1 1, 1])`. 
+Below you will see pipeline stage assignment like this: `[0, 0, 0, 0, 1, 1])`. 
 This means that first two layers of `Sequential` model are assigned to 
 the first stage, and the remaining layers to the second stage.
 
@@ -367,7 +427,7 @@ def create_pipeline_sequential_model():
         ],
         name="multipleIPUsequential"
     )
-    seq_model.set_pipeline_stage_assignment([0, 0, 1, 1, 1, 1])
+    seq_model.set_pipeline_stage_assignment([0, 0, 0, 0, 1, 1])
 
     return seq_model
 ```
@@ -378,7 +438,7 @@ Next we refresh IPU device configuration and train again with the new model.
 
 
 ```python
-ipu_configuration = make_ipu_config(num_ipus=2)
+configure_ipus(num_ipus=2)
 
 train(
     strategy=ipu.ipu_strategy.IPUStrategy(),
@@ -387,11 +447,11 @@ train(
 )
 ```
 
-## Showcasing the `PipelineSchedule` setting effects on training
+## Other `PipelineSchedule` settings
 
-Next we can reuse the previous example and apply different scheduling modes,
-as mentioned at the top of this document. The modes can be characterized
-in detail like so (quoting the docstring of `PipelineSchedule`):
+Next we can reuse the previous example and apply a different scheduling mode.
+The modes can be characterized in detail like so (quoting the docstring of 
+`PipelineSchedule`):
 
 - `Grouped`: This groups the forward passes on multiple IPUs. This requires
   more memory since activations need to be stored until the backward stages run
@@ -409,7 +469,7 @@ in detail like so (quoting the docstring of `PipelineSchedule`):
 - `Sequential`: This is a debug mode, where the pipeline is scheduled in
   the same way as if it were a sharded model.
 
-### Define the model
+### Defining the model with `Interleaved` schedule
 
 The mode `Grouped` was used in the previous example, as it is the default
 setting. In this next example we will use the `Interleaved` mode.
@@ -440,7 +500,7 @@ def create_pipeline_sequential_model_interleaved():
 
 
 ```python
-ipu_configuration = make_ipu_config(num_ipus=2)
+configure_ipus(num_ipus=2)
 
 train(
     strategy=ipu.ipu_strategy.IPUStrategy(),
@@ -448,3 +508,41 @@ train(
     train_ds=train_ds
 )
 ```
+
+## Summary and further reading
+
+In the course of this tutorial multiple examples of model parallelism with IPU
+devices were presented. Try and change some hyperparameters or IPU count and
+observe the differences. You can investigate details of execution using 
+the PopVision tool.
+
+If you execute this code with environmental variable:
+```bash
+POPLAR_ENGINE_OPTIONS='{"autoReport.all":"true"}' python3 pipelining.py
+```
+Or set this variable inside Jupyter Notebook:
+```python
+import os
+os.environ['POPLAR_ENGINE_OPTIONS']='{"autoReport.all":"true"}'
+```
+Then you could use the generated report, which for this tutorial might look
+like this:
+```bash
+ls .
+> ./tf_report__2021-10-06__02-24-24.631__70052:
+> archive.a
+> debug.cbor
+> framework.json
+> profile.pop
+> profile.pop_cache
+```
+
+## PopVision - reading the reports
+When you open such a report, you could navigate to multiple tabs which present
+different aspects of the IPU computation. You can find more information on the
+[PopVision User Guide](https://docs.graphcore.ai/projects/graphcore-popvision-user-guide/en/latest/index.html) page.
+
+For further reading about related topics please check:
+- [Keras API docs](https://docs.graphcore.ai/projects/tensorflow-user-guide/en/latest/api.html#keras)
+- [Upgrading from TF2.1](https://docs.graphcore.ai/projects/tensorflow-user-guide/en/latest/keras_tf2.html#porting-models-from-tensorflow-2-1)
+- [Automatic Data Parallelism](https://docs.graphcore.ai/projects/tensorflow-user-guide/en/latest/keras_tf2.html#automatic-data-parallelism)

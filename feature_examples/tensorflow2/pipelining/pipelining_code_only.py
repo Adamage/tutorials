@@ -53,7 +53,7 @@ def create_dataset(batch_size: int, repeat=True):
 
 train_ds = create_dataset(batch_size=BATCH_SIZE)
 
-def make_ipu_config(
+def configure_ipus(
         num_ipus: int,
         selection_order: Optional[ipu.utils.SelectionOrder] = None
 ) -> ipu.config.IPUConfig:
@@ -65,7 +65,6 @@ def make_ipu_config(
         ipu_configuration.selection_order = selection_order
 
     ipu_configuration.configure_ipu_system()
-    return ipu_configuration
 
 def train(strategy,
           model_factory,
@@ -116,7 +115,7 @@ def create_functional_model(batch_size=BATCH_SIZE):
     )
     return model
 
-ipu_configuration = make_ipu_config(num_ipus=1)
+configure_ipus(num_ipus=1)
 
 train(
     strategy=ipu.ipu_strategy.IPUStrategy(),
@@ -138,7 +137,7 @@ def create_sequential_model():
     )
     return seq_model
 
-ipu_configuration = make_ipu_config(num_ipus=1)
+configure_ipus(num_ipus=1)
 
 train(
     strategy=ipu.ipu_strategy.IPUStrategy(),
@@ -165,7 +164,7 @@ def create_functional_model_with_stages():
                   name="multipleIPUfunctional")
     return model
 
-ipu_configuration = make_ipu_config(num_ipus=2)
+configure_ipus(num_ipus=2)
 
 train(
     strategy=ipu.ipu_strategy.IPUStrategy(),
@@ -185,11 +184,11 @@ def create_pipeline_sequential_model():
         ],
         name="multipleIPUsequential"
     )
-    seq_model.set_pipeline_stage_assignment([0, 0, 1, 1, 1, 1])
+    seq_model.set_pipeline_stage_assignment([0, 0, 0, 0, 1, 1])
 
     return seq_model
 
-ipu_configuration = make_ipu_config(num_ipus=2)
+configure_ipus(num_ipus=2)
 
 train(
     strategy=ipu.ipu_strategy.IPUStrategy(),
@@ -216,7 +215,7 @@ def create_pipeline_sequential_model_interleaved():
     )
     return seq_model
 
-ipu_configuration = make_ipu_config(num_ipus=2)
+configure_ipus(num_ipus=2)
 
 train(
     strategy=ipu.ipu_strategy.IPUStrategy(),

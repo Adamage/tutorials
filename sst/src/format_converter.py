@@ -37,7 +37,7 @@ def py_to_ipynb(py_file_text: str) -> NotebookNode:
     cell_lines, cell_tags = [], []
 
     for line in py_file_text.splitlines():
-        add_tag_if_possible(text=line, cell_tags=cell_tags)
+        add_tag_if_possible(line=line, cell_tags=cell_tags)
 
         if is_code_or_markdown(line):
             cell_lines.append(line)

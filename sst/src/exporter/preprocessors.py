@@ -10,20 +10,17 @@ from src.constants import SST_HIDE_OUTPUT_TAG, REGEX_COPYRIGHT_PATTERN, SST_IGNO
 
 def configure_tag_remove_preprocessor_to_hide_output(c: Config):
     c.TagRemovePreprocessor.remove_all_outputs_tags = (SST_HIDE_OUTPUT_TAG,)
-    c.TagRemovePreprocessor.enabled = True
     return c
 
 
 def configure_tag_remove_preprocessor_to_remove_cell(c: Config):
     c.TagRemovePreprocessor.remove_cell_tags = (SST_IGNORE_JUPYTER_MD_TAG,)
-    c.TagRemovePreprocessor.enabled = True
     return c
 
 
 def configure_copyright_regex_removal_preprocessor(c: Config):
     c.RegexWithFlagsRemovePreprocessor.patterns = [REGEX_COPYRIGHT_PATTERN]
     c.RegexWithFlagsRemovePreprocessor.flag = re.RegexFlag.IGNORECASE
-    c.RegexWithFlagsRemovePreprocessor.enabled = True
     return c
 
 

@@ -1,6 +1,6 @@
-# © Copyright 2020, The Hugging Face Team, Licenced under the Apache License,
-# Version 2.0
-# © Copyright 2020 Graphcore Ltd. All rights reserved.
+# © Copyright 2021 Graphcore Ltd. All rights reserved.
+# 
+# © Copyright 2020, The Hugging Face Team, Licenced under the Apache License,Version 2.0
 from datasets import load_dataset
 
 raw_datasets = load_dataset("imdb")
@@ -57,7 +57,8 @@ model.electra.embeddings = poptorch.BeginBlock(
     model.electra.embeddings, "Embedding", ipu_id=0
 )
 ipu_ids = [1] * 4 + [2] * 4 + [3] * 4
-for index, (layer, ipu_id) in enumerate(zip(model.electra.encoder.layer, ipu_ids)):
+for index, (layer, ipu_id) in enumerate(
+        zip(model.electra.encoder.layer, ipu_ids)):
     model.electra.encoder.layer[index] = poptorch.BeginBlock(
         layer, f"Encoder{index}", ipu_id=ipu_id
     )
@@ -108,7 +109,6 @@ progress_bar = tqdm(range(number_of_iterations))
 
 def train_epoch():
     trainingModel.train()
-    trainingModel.attachToDevice()
 
     for batch in train_dataloader:
         loss, logits = trainingModel(**batch)
@@ -122,7 +122,6 @@ from sklearn.metrics import accuracy_score
 @torch.no_grad()
 def val_epoch():
     inferenceModel.eval()
-    inferenceModel.attachToDevice()
 
     y_pred, y_true = [], []
     for batch in eval_dataloader:

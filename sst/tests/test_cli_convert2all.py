@@ -77,3 +77,31 @@ def test_cli_convert2all_when_no_output_dir_and_default_markdown_name(cli_runner
     assert os.path.exists(markdown_file_path.with_suffix('.md'))
     assert os.path.exists(outfile_path.with_suffix('.ipynb'))
     assert os.path.exists(outfile_path.with_name('my_file_code_only.py'))
+
+
+def test_cli_convert2all_when_excluding_code_output(cli_runner_instance, tmp_path):
+    result = cli_runner_instance.invoke(
+        cli,
+        [
+            'convert2all',
+            '--source', TRIVIAL_MAPPING_SOURCE_PATH,
+            '--output-dir', tmp_path,
+            '--markdown-name', 'trivial_mapping_md_code_md',
+            '--exclude-code-output'
+        ]
+    )
+    print_exception(result)
+
+    outfile_path = tmp_path / Path('trivial_mapping_md_code_md')
+
+    for file_name in [
+        outfile_path.with_suffix('.md'),
+        outfile_path.with_suffix('.ipynb')
+    ]:
+        assert os.path.exists(file_name)
+
+    assert not os.path.exists(
+        outfile_path.with_name('trivial_mapping_md_code_md_code_only.py')
+    )
+
+    assert result.exit_code == 0

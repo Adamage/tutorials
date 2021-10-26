@@ -1,5 +1,9 @@
 files:
   - name: File1
     source: tests/static/trivial_mapping_md_code_md.py
+    markdown_name: DONT_README.md
   - name: File2
     source: tests/static/py_with_import.py
+  - name: File3
+    source: tests/static/just_py_method.py
+    include_code_only: False

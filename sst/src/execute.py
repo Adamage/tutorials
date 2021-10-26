@@ -1,16 +1,19 @@
 # Copyright (c) 2021 Graphcore Ltd. All rights reserved.
 from pathlib import Path
+from typing import List
 
-from tqdm import tqdm
 from nbconvert.exporters.exporter import ResourcesDict
 from nbconvert.writers import FilesWriter
+from tqdm import tqdm
 
 from src.batch_execution import batch_config
-from src.constants import NBCONVERT_RESOURCE_OUTPUT_EXT_KEY, IMAGES_DIR, NBCONVERT_RESOURCE_OUTPUT_DIR_KEY
+from src.constants import NBCONVERT_RESOURCE_OUTPUT_EXT_KEY, IMAGES_DIR, \
+    NBCONVERT_RESOURCE_OUTPUT_DIR_KEY, README_FILE_NAME
 from src.exporter.factory import exporter_factory
 from src.format_converter import py_to_ipynb
-from src.output_types import supported_types, OutputTypes
-from src.utils.file import set_output_extension_and_type, output_path_code
+from src.output_types import OutputTypes
+from src.utils.file import output_path_code, \
+    output_path_markdown, output_path_jupyter
 from src.utils.logger import get_logger
 
 logger = get_logger()
@@ -53,19 +56,66 @@ def save_conversion_results(output: Path, output_content: str, resources: Resour
     writer.write(output=output_content, resources=resources, notebook_name=str(output.name))
 
 
-def execute_multiple_conversions(source_directory: Path, output_directory: Path, config_path: Path, execute: bool):
-    conversion_configs = batch_config(config_path)
-    output_directory.mkdir(parents=True, exist_ok=True)
+def execute_multiple_conversions(
+        source_directory: Path,
+        output_directory: Path,
+        config_path: Path,
+        execute: bool) -> None:
 
-    for tc in tqdm(conversion_configs, desc="SST All Configs", leave=True):
-        for supported_type in tqdm(supported_types(), desc="SST Config", leave=False):
-            output, output_type = set_output_extension_and_type(output_directory / tc.name, supported_type)
+    for tc in tqdm(batch_config(config_path), desc="SST All Configs"):
+        source = source_directory / tc.source
+        markdown_name = tc.markdown_name
 
-            output = output_path_code(output) if output_type == OutputTypes.CODE_TYPE else output
+        tc_output = output_directory / tc.name
+        tc_output.mkdir(parents=True, exist_ok=True)
 
-            execute_conversion(
-                execute=execute if supported_type is OutputTypes.MARKDOWN_TYPE else False,
-                output=output,
-                source=source_directory / tc.source,
-                output_type=output_type
-            )
+        conversion_config = prepare_conversion_config(
+            source=source,
+            output_dir=tc_output,
+            include_code_output=tc.include_code_only,
+            markdown_name=markdown_name if markdown_name else README_FILE_NAME,
+            execute=execute
+        )
+        convert_to_outputs(source=source, configuration=conversion_config)
+
+
+def convert_to_outputs(source: Path, configuration: List) -> None:
+    for outfile, output_type, execution in tqdm(configuration, desc="SST Config", leave=False):
+        execute_conversion(
+            source=source,
+            output=outfile,
+            output_type=output_type,
+            execute=execution
+        )
+
+
+def prepare_conversion_config(
+        source: Path,
+        output_dir: Path,
+        execute: bool,
+        include_code_output: bool,
+        markdown_name: str
+) -> List:
+
+    assert source.suffix == '.py', 'Only python file can be single source file'
+
+    if output_dir is None:
+        output_dir = source.parent
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    output_filename = output_dir / source.stem
+
+    markdown_filename = output_dir / markdown_name
+
+    configuration = [
+        [output_path_markdown(markdown_filename), OutputTypes.MARKDOWN_TYPE, execute],
+        [output_path_jupyter(output_filename), OutputTypes.JUPYTER_TYPE, False]
+    ]
+
+    if include_code_output:
+        configuration.append(
+            [output_path_code(output_filename), OutputTypes.CODE_TYPE, False]
+        )
+
+    return configuration

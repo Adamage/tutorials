@@ -24,15 +24,19 @@ def test_cli_batch_convert(cli_runner_instance, tmp_path):
     source_dir = STATIC_FILES.parent.parent
 
     result = cli_runner_instance.invoke(cli, ['batch-convert',
-                                              '--config', example_config, "--output-dir", output_dir, "--source-dir",
-                                              source_dir, "--no-execute"
+                                              '--config', example_config,
+                                              "--output-dir", output_dir,
+                                              "--source-dir",
+                                              source_dir,
+                                              "--no-execute"
                                               ])
 
     print_exception(result)
 
     assert result.exit_code == 0
-
-    assert len(os.listdir(output_dir)) == 6
+    assert len(os.listdir(output_dir / "File1")) == 3
+    assert os.path.exists(output_dir / "File1" / 'DONT_README.md')
+    assert len(os.listdir(output_dir / "File2")) == 3
 
 
 @pytest.mark.parametrize("config_path", ['conversion_config_incorrect.yml', 'conversion_config_empty.yml'])

@@ -5,7 +5,7 @@ from typing import List, Dict
 
 import yaml
 
-SSTConversionConfig = namedtuple("SSTConversionConfig", "name source")
+SSTConversionConfig = namedtuple("SSTConversionConfig", "name source markdown_name")
 
 
 def batch_config(config_path: Path) -> List[SSTConversionConfig]:
@@ -16,7 +16,8 @@ def batch_config(config_path: Path) -> List[SSTConversionConfig]:
     sst_conversion_configs = [
         SSTConversionConfig(
             name=conversion_config.get("name", "no_name"),
-            source=conversion_config.get("source", None)
+            source=conversion_config.get("source", None),
+            markdown_name=conversion_config.get("markdown_name", None)
         )
         for conversion_config in parsed_configs
     ]
@@ -27,6 +28,6 @@ def batch_config(config_path: Path) -> List[SSTConversionConfig]:
     return sst_conversion_configs
 
 
-def _parse_config(config_path: Path) -> List[Dict[str, str]]:
+def _parse_config(config_path: Path) -> Dict:
     with open(config_path) as f:
         return yaml.load(f,  yaml.SafeLoader)

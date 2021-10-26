@@ -1,8 +1,9 @@
 # Copyright (c) 2021 Graphcore Ltd. All rights reserved.
 from enum import Enum
+from typing import List
 
 
-def supported_types():
+def supported_types() -> List:
     return list(OutputTypes)
 
 

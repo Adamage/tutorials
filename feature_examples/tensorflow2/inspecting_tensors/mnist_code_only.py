@@ -72,6 +72,49 @@ gradients_filters = ['Dense_128']
 # pipelined models.
 activations_filters = ['none']
 
+import argparse
+
+parser = argparse.ArgumentParser()
+
+parser.add_argument(
+    '--outfeed-pre-accumulated-gradients',
+    action='store_true',
+    help="Outfeed the pre-accumulated rather than accumulated gradients."
+         " Only makes a difference when using gradient accumulation"
+         " (which is the case when pipelining).")
+parser.add_argument(
+    '--steps-per-epoch', type=int, default=500,
+    help="Number of steps to run per epoch.")
+parser.add_argument(
+    '--epochs', type=int, default=3, help="Number of epochs.")
+parser.add_argument(
+    '--gradients-filters', nargs='+', type=str, default=['Dense_128'],
+    help="Space separated strings for determining which gradients"
+         " to add to the dict that is enqueued on the outfeed queue."
+         " Pass '--gradients-filters none' to disable filtering.")
+parser.add_argument(
+    '--activations-filters', nargs='+', type=str, default=['none'],
+    help="Space separated strings for determining which activations"
+         " in the second PipelineStage"
+         " to add to the dict that is enqueued on the outfeed queue."
+         " Pass '--activations-filters none' to disable filtering."
+         " (Only applicable for the Pipeline models.)")
+
+args = parser.parse_args()
+
+print(args)
+
+if args.outfeed_pre_accumulated_gradients:
+    outfeed_pre_accumulated_gradients = \
+        args.outfeed_pre_accumulated_gradients
+
+steps_per_epoch = args.steps_per_epoch
+steps_per_execution - steps_per_epoch
+epochs = args.epochs
+
+activations_filters = args.activations_filters
+gradients_filters = args.gradients_filters
+
 if outfeed_pre_accumulated_gradients:
     outfeed_optimizer_mode = OutfeedOptimizerMode.AFTER_COMPUTE
 else:

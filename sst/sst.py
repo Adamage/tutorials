@@ -69,9 +69,7 @@ def convert2all(source: Path, output_dir: Path, markdown_name: str, include_code
 @click.option('--output-dir', '-o', required=True, type=Path,
               help='Absolute or relative path to output directory for all files')
 @click.option('--execute/--no-execute', default=True, help='Flag whether the notebook is to be executed or not')
-@click.option('--include-code-output/--exclude-code-output', required=False, type=bool, default=True,
-              help='Flag deciding if the code-only output should be exported.')
-def batch_convert(config: Path, source_dir: Path, output_dir: Path, execute: bool, include_code_output: bool) -> None:
+def batch_convert(config: Path, source_dir: Path, output_dir: Path, execute: bool) -> None:
     """
     Transforms python files specified in config into all possible formats: jupyter notebook, markdown and python code.
     Each source will get it's own output directory under the 'output_dir'.
@@ -80,8 +78,7 @@ def batch_convert(config: Path, source_dir: Path, output_dir: Path, execute: boo
         source_directory=source_dir,
         output_directory=output_dir,
         config_path=config,
-        execute=execute,
-        include_code_output=include_code_output
+        execute=execute
     )
 
 

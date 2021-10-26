@@ -60,8 +60,7 @@ def execute_multiple_conversions(
         source_directory: Path,
         output_directory: Path,
         config_path: Path,
-        execute: bool,
-        include_code_output: bool) -> None:
+        execute: bool) -> None:
 
     for tc in tqdm(batch_config(config_path), desc="SST All Configs"):
         source = source_directory / tc.source
@@ -73,7 +72,7 @@ def execute_multiple_conversions(
         conversion_config = prepare_conversion_config(
             source=source,
             output_dir=tc_output,
-            include_code_output=include_code_output,
+            include_code_output=tc.include_code_only,
             markdown_name=markdown_name if markdown_name else README_FILE_NAME,
             execute=execute
         )

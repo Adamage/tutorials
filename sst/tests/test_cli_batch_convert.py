@@ -36,7 +36,11 @@ def test_cli_batch_convert(cli_runner_instance, tmp_path):
     assert result.exit_code == 0
     assert len(os.listdir(output_dir / "File1")) == 3
     assert os.path.exists(output_dir / "File1" / 'DONT_README.md')
+
     assert len(os.listdir(output_dir / "File2")) == 3
+
+    assert len(os.listdir(output_dir / "File3")) == 2
+    assert not os.path.exists(output_dir / "File3" / 'just_py_method_code_only.py')
 
 
 @pytest.mark.parametrize("config_path", ['conversion_config_incorrect.yml', 'conversion_config_empty.yml'])

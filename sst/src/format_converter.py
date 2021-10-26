@@ -6,7 +6,7 @@ from typing import List, Optional
 from nbformat import NotebookNode
 from nbformat.v4 import new_notebook, new_markdown_cell, new_code_cell
 
-from src.constants import CELL_SEPARATOR, SST_HIDE_OUTPUT_TAG, SHEBANG_MARKER
+from src.constants import CELL_SEPARATOR, SST_HIDE_OUTPUT_TAG, SHEBANG_MARKER, ALLOWED_TAGS
 
 
 class CellType(Enum):
@@ -37,9 +37,7 @@ def py_to_ipynb(py_file_text: str) -> NotebookNode:
     cell_lines, cell_tags = [], []
 
     for line in py_file_text.splitlines():
-
-        if SST_HIDE_OUTPUT_TAG in line and SST_HIDE_OUTPUT_TAG not in cell_tags:
-            cell_tags.append(SST_HIDE_OUTPUT_TAG)
+        add_tag_if_possible(text=line, cell_tags=cell_tags)
 
         if is_code_or_markdown(line):
             cell_lines.append(line)
@@ -64,6 +62,15 @@ def py_to_ipynb(py_file_text: str) -> NotebookNode:
     notebook = new_notebook(cells=cells)
 
     return notebook
+
+
+def add_tag_if_possible(line: str, cell_tags: List[str]) -> None:
+    """
+    Look for tags in the text and the tag is added to cell_tags if it is not in cell_tags
+    """
+    for tag in ALLOWED_TAGS:
+        if tag in line and tag not in cell_tags:
+            cell_tags.append(tag)
 
 
 def create_cell_from_lines(cell_lines: List[str], cell_type: CellType, cell_tags: List[str]) -> Optional[NotebookNode]:
@@ -101,4 +108,4 @@ def is_code_or_markdown(line: str) -> bool:
     """
     return not line.startswith(CELL_SEPARATOR) and \
            not line.startswith(SHEBANG_MARKER) and \
-           not SST_HIDE_OUTPUT_TAG in line
+           not any(tag in line for tag in ALLOWED_TAGS)

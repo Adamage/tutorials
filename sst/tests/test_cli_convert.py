@@ -194,3 +194,47 @@ def test_cli_convert_when_input_file_is_not_py(cli_runner_instance):
         result = cli_runner_instance.invoke(cli, ['convert', '--source', 'input.txt', "--output", 'output.py'])
         if result.exception:
             raise result.exception
+
+
+@pytest.mark.parametrize("extension", ['ipynb', 'md'])
+def test_remove_cell_tag_when_jupyter_or_md(cli_runner_instance, tmp_path, extension):
+    example_input = STATIC_FILES / "cell_should_be_only_in_code_only.py"
+    outfile_path = tmp_path / ('output.' + extension)
+
+    result = cli_runner_instance.invoke(cli, [
+        'convert', '--source', example_input, "--output", outfile_path
+    ])
+
+    print_exception(result)
+    assert result.exit_code == 0
+
+    content = outfile_path.read_text()
+    assert 'CORRECT FIRST CELL' in content
+    assert 'CORRECT LAST CELL' in content
+    assert 'CORRECT CODE' in content
+    assert 'HIDDEN CODE' not in content
+    assert 'HIDDEN CELL' not in content
+    assert 'sst_ignore_jupyter_md' not in content
+
+
+def test_remove_cell_tag_when_code_only(cli_runner_instance, tmp_path,):
+    example_input = STATIC_FILES / "cell_should_be_only_in_code_only.py"
+    outfile_path = tmp_path / 'output.py'
+
+    result = cli_runner_instance.invoke(cli, [
+        'convert', '--source', example_input, "--output", outfile_path
+    ])
+
+    print_exception(result)
+    assert result.exit_code == 0
+
+    content = outfile_path.read_text()
+
+    assert 'CORRECT CODE' in content
+    assert 'HIDDEN CODE' in content
+
+    assert 'HIDDEN CELL' not in content
+    assert 'CORRECT FIRST CELL' not in content
+    assert 'CORRECT LAST CELL' not in content
+
+    assert 'sst_ignore_jupyter_md' not in content

@@ -5,10 +5,11 @@ from traitlets.config import Config
 
 from src.exporter.code_exporter import CodeExporter
 from src.exporter.execute_preprocessor_with_progress_bar import ExecutePreprocessorWithProgressBar
-from src.exporter.preprocessors import configure_tag_removal_preprocessor, \
-    configure_extract_outputs_preprocessor, \
+from src.exporter.preprocessors import \
+    configure_tag_remove_preprocessor_to_hide_output, \
     configure_copyright_regex_removal_preprocessor, \
-    RegexWithFlagsRemovePreprocessor
+    RegexWithFlagsRemovePreprocessor, \
+    configure_tag_remove_preprocessor_to_remove_cell
 from src.output_types import OutputTypes
 
 
@@ -18,9 +19,9 @@ def markdown_exporter_with_preprocessors(execute_enabled: bool) -> Exporter:
 
     config = Config()
     for apply_configuration in [
-        configure_tag_removal_preprocessor,
+        configure_tag_remove_preprocessor_to_hide_output,
+        configure_tag_remove_preprocessor_to_remove_cell,
         configure_copyright_regex_removal_preprocessor,
-        configure_extract_outputs_preprocessor
     ]:
         config = apply_configuration(config)
 
@@ -37,6 +38,10 @@ def markdown_exporter_with_preprocessors(execute_enabled: bool) -> Exporter:
 def notebook_exporter_with_preprocessors(execute_enabled: bool) -> Exporter:
     exporter = NotebookExporter()
     exporter.register_preprocessor(ExecutePreprocessorWithProgressBar(), enabled=execute_enabled)
+
+    config = Config()
+    config = configure_tag_remove_preprocessor_to_remove_cell(config)
+    exporter.register_preprocessor(TagRemovePreprocessor(config=config, enabled=True))
 
     return exporter
 

@@ -5,17 +5,18 @@ from nbconvert.preprocessors import RegexRemovePreprocessor
 from traitlets import Enum
 from traitlets.config import Config
 
-from src.constants import SST_HIDE_OUTPUT_TAG, REGEX_COPYRIGHT_PATTERN
+from src.constants import SST_HIDE_OUTPUT_TAG, REGEX_COPYRIGHT_PATTERN, SST_IGNORE_JUPYTER_MD_TAG
 
 
-def configure_tag_removal_preprocessor(c: Config):
+def configure_tag_remove_preprocessor_to_hide_output(c: Config):
     c.TagRemovePreprocessor.remove_all_outputs_tags = (SST_HIDE_OUTPUT_TAG,)
     c.TagRemovePreprocessor.enabled = True
     return c
 
 
-def configure_extract_outputs_preprocessor(c: Config):
-    c.ExtractOutputsPreprocessor.enabled = True
+def configure_tag_remove_preprocessor_to_remove_cell(c: Config):
+    c.TagRemovePreprocessor.remove_cell_tags = (SST_IGNORE_JUPYTER_MD_TAG,)
+    c.TagRemovePreprocessor.enabled = True
     return c
 
 

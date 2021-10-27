@@ -74,6 +74,18 @@ for _ in range(1000):
 # sst_hide_output
 ```
 
+#### Hiding cells
+If you would like to include a cell that will not be shown in Jupyter Notebook and Markdown, you can use the tag:
+`# sst_ignore_jupyter_md` - note that line with this tag will be hidden. Such a cell can be used to control an 
+execution of a code only file. For example:
+
+```python
+for _ in range(1000):
+    print(greet('John'))
+# sst_ignore_jupyter_md
+```
+
+
 #### Special handling
 This tool implements special handling for few particular cases of words or technical elements that will be handled in 
 a characteristic way.

@@ -24,10 +24,12 @@ def markdown_exporter_with_preprocessors(execute_enabled: bool) -> Exporter:
     ]:
         config = apply_configuration(config)
 
-    # TagRemovePreprocessor must be before and after the execution because it has to remove the cells before the
-    # jupyter notebook is executed and after to remove the generated outputs
-    preprocessors = [TagRemovePreprocessor, ExecutePreprocessorWithProgressBar] if execute_enabled else []
-    preprocessors += [TagRemovePreprocessor, RegexWithFlagsRemovePreprocessor, ExtractOutputPreprocessor]
+    preprocessors = [TagRemovePreprocessor, RegexWithFlagsRemovePreprocessor]
+    if execute_enabled:
+        # TagRemovePreprocessor must be before and after the execution because it has to remove the cells before the
+        # jupyter notebook is executed and after to remove the generated outputs
+        preprocessors = [TagRemovePreprocessor, ExecutePreprocessorWithProgressBar] + preprocessors
+        preprocessors += [ExtractOutputPreprocessor]
 
     for preprocessor in preprocessors:
         exporter.register_preprocessor(preprocessor(config=config), enabled=True)

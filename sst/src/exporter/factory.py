@@ -15,33 +15,44 @@ from src.output_types import OutputTypes
 
 def markdown_exporter_with_preprocessors(execute_enabled: bool) -> Exporter:
     exporter = MarkdownExporter()
-    exporter.register_preprocessor(ExecutePreprocessorWithProgressBar(), enabled=execute_enabled)
 
     config = Config()
     for apply_configuration in [
-        configure_tag_remove_preprocessor_to_hide_output,
         configure_tag_remove_preprocessor_to_remove_cell,
+        configure_tag_remove_preprocessor_to_hide_output,
         configure_copyright_regex_removal_preprocessor,
     ]:
         config = apply_configuration(config)
 
-    for preprocessor in [
-        TagRemovePreprocessor(config=config),
-        RegexWithFlagsRemovePreprocessor(config=config),
-        ExtractOutputPreprocessor(config=config)
-    ]:
-        exporter.register_preprocessor(preprocessor, enabled=True)
+    # TagRemovePreprocessor must be before and after the execution because it has to remove the cells before the
+    # jupyter notebook is executed and after to remove the generated outputs
+    preprocessors = [TagRemovePreprocessor, ExecutePreprocessorWithProgressBar] if execute_enabled else []
+    preprocessors += [TagRemovePreprocessor, RegexWithFlagsRemovePreprocessor, ExtractOutputPreprocessor]
+
+    for preprocessor in preprocessors:
+        exporter.register_preprocessor(preprocessor(config=config), enabled=True)
 
     return exporter
 
 
 def notebook_exporter_with_preprocessors(execute_enabled: bool) -> Exporter:
     exporter = NotebookExporter()
-    exporter.register_preprocessor(ExecutePreprocessorWithProgressBar(), enabled=execute_enabled)
 
     config = Config()
-    config = configure_tag_remove_preprocessor_to_remove_cell(config)
-    exporter.register_preprocessor(TagRemovePreprocessor(config=config, enabled=True))
+    for apply_configuration in [
+        configure_tag_remove_preprocessor_to_remove_cell,
+        configure_tag_remove_preprocessor_to_hide_output,
+    ]:
+        config = apply_configuration(config)
+
+    preprocessors = [TagRemovePreprocessor]
+    if execute_enabled:
+        # TagRemovePreprocessor must be before and after the execution because it has to remove the cells before the
+        # jupyter notebook is executed and after to remove the generated outputs
+        preprocessors += [ExecutePreprocessorWithProgressBar, TagRemovePreprocessor]
+
+    for preprocessor in preprocessors:
+        exporter.register_preprocessor(preprocessor(config=config), enabled=True)
 
     return exporter
 

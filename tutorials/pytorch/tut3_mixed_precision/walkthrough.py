@@ -159,6 +159,34 @@ stochastic_rounding = True
 # Set partials data type to FP16
 partials_half = False
 """
+This cell exists to provide compatibility with unit tests for this tutorial.
+It will be automatically removed in the Jupyter and Markdown export formats.
+# sst_ignore_jupyter_md
+"""
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--model-half', dest='model_half', action='store_true',
+                    help='Cast the model parameters to FP16')
+parser.add_argument('--data-half', dest='data_half', action='store_true',
+                    help='Cast the data to FP16')
+parser.add_argument('--optimizer-half', dest='optimizer_half',
+                    action='store_true',
+                    help='Cast the accumulation type of the optimiser to FP16')
+parser.add_argument('--stochastic-rounding', dest='stochastic_rounding',
+                    action='store_true', help='Use stochasting rounding')
+parser.add_argument('--partials-half', dest='partials_half',
+                    action='store_true', help='Set partials data type to FP16')
+args = parser.parse_args()
+
+model_half = args.model_half
+data_half = args.data_half
+optimizer_half = args.optimizer_half
+stochastic_rounding = args.stochastic_rounding
+partials_half = args.partials_half
+
+# sst_ignore_jupyter_md
+"""
 ### Casting a model's parameters
 
 The default data type of the parameters of a PyTorch module is FP32 

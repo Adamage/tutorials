@@ -213,9 +213,8 @@ which we have previously instantiated. An optimiser is also required for
 the translation of our model to a program that can be executed on an IPU. Then 
 we will compile the models using one batch from our dataset.
 
-In addition, the compilation of the model automatically attaches it to the 
-device. We only need to execute one model at a time (between training and 
-inference), therefore we call `detachFromDevice` to explicitly detach each 
+We only need to execute one model at a time (between training and inference), 
+therefore we call `detachFromDevice` to explicitly detach each 
 model after compilation. This ensures we aren't holding IPUs unnecessarily and 
 reducing overall utilisation.
 
@@ -248,12 +247,12 @@ training state, and add a progress bar. We do not need to include
 `loss.backward()` as `poptorch.trainingModel` does this itself. 
 
 Explicit attaching the model to the device is not necessary, because calling 
-the model will make it attached automatically, however, at the of the method 
-we detach it using `detachFromDevice`. It is worth noting here, that detaching 
-the model from the device will automatically synchronise the updated weights 
-of the model and transfer them to the CPU, so when we attach the model for the 
-inference to the IPU device, the model will have the current state and copying 
-the weights explicitly between devices is not necessary.
+the model will make it attached automatically. Note that at the end of the 
+following function we explicitly detach the model from the IPUs it was using. 
+This automatically synchronises the updated weights of the model and transfers 
+them to the CPU, so when we attach the model for the inference to the IPU 
+device, the model will have the current state and copying the weights 
+explicitly between devices is not necessary.
 """
 from tqdm.auto import tqdm
 

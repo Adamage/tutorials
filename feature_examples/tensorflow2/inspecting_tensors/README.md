@@ -5,17 +5,18 @@ on the MNIST numeral data set and see how tensors (containing activations
 and gradients) can be returned to the host via outfeeds for inspection.
 
 An outfeed is the counterpart to an infeed and manages the transfer of data 
-(like tensors, tuples or dictionaries of tensors) from the IPU graph to 
-the host. Too learn more about using feeds, see [outfeed queues](https://docs.graphcore.ai/projects/tensorflow-user-guide/en/latest/api.html#outfeed-queue).
+(like tensors, tuples or dictionaries of tensors) from the IPU to the host. 
+Too learn more about using outfeeds, see [outfeed queues](https://docs.graphcore.ai/projects/tensorflow-user-guide/en/latest/api.html#outfeed-queue).
 
 Outfeeds can be useful for debugging, but can significantly increase the amount
 of memory required on the IPU(s). When pipelining, you could use a smaller
 value for the gradient accumulation count to mitigate this. Also consider using
-a small number of steps per execution to reduce memory footprint. 
+a small number of [steps per execution[(https://github.com/tensorflow/tensorflow/blob/master/tensorflow/python/keras/engine/training.py#L537)
+to reduce memory footprint. 
 
 In this demo, filters can be used to return only a subset of the activations
 and gradients. The outfed information can be returned to a variable or can be
-printed to the standard output. In [`outfeed_callback.py`](./outfeed_callback.py)
+printed to the standard output. In [`outfeed_callback.py`](https://github.com/graphcore/tutorials/blob/master/feature_examples/tensorflow2/inspecting_tensors/outfeed_callback.py)
 the implementation is to print this information to the standard output.
 
 ## How to use this demo
@@ -39,7 +40,8 @@ the implementation is to print this information to the standard output.
 
 ### Custom classes descriptions
 
-This tutorial uses the following classes, which are implemented in libraries:
+This tutorial uses the following classes, which are implemented in separate
+[Python files](https://github.com/graphcore/tutorials/tree/master/feature_examples/tensorflow2/inspecting_tensors):
 
 * `outfeed_wrapper.MaybeOutfeedQueue` - a wrapper for an IPUOutfeedQueue that 
   allows key-value pairs to be selectively added to a dictionary that can then 
@@ -128,7 +130,7 @@ over two IPUs. Gradients for one of the layers, and activations for two of
 the layers, are returned for inspection on the host. This can be changed using 
 options.
 
-The gradient accumulation count `gradient_accumulation_steps_per_replica`
+The gradient accumulation count (`gradient_accumulation_steps_per_replica`)
 determines the pipeline depth, so the number of activations and gradients 
 added to the outfeed queues will be proportional to the gradient accumulation 
 value. Additionally, the outfeed callback is called at the end of the epoch, 
@@ -158,8 +160,8 @@ def create_pipeline_sequential_model(multi_activations_outfeed_queue):
 ## Configuring the demo
 
 Choose values for the following variables that hold parameters.
-If you change them for experimentation in a Jupyter notebook, re-run all t
-he cells below including this one.
+If you change them for experimentation in a Jupyter notebook, re-run all
+the cells below including this one.
 
 
 ```python
@@ -191,9 +193,8 @@ gradients_filters = ['Dense_128']
 activations_filters = ['none']
 ```
 
-Automatically set these parameters based on user input and configure the IPU
-system.
-Outfeed optimizer mode documentation can be found in [outfeed_optimizer](./outfeed_optimizer.py)
+If the above `outfeed_pre_accumulated_gradients` is set to `True`, then
+modify the outfeed optimizer mode. You can read more about this in [outfeed_optimizer](https://github.com/graphcore/tutorials/blob/master/feature_examples/tensorflow2/inspecting_tensors/outfeed_optimizer.py).
 
 
 ```python
@@ -247,7 +248,7 @@ cfg.configure_ipu_system()
 
 If you are using Keras, you must instantiate your Keras model inside of 
 a strategy scope, which is a Python context manager.
-More details about the `IPUStrategy` [here](https://docs.graphcore.ai/projects/tensorflow-user-guide/en/latest/targeting_tf2.html#ipustrategy).
+More details about the `IPUStrategy` API can be found [here](https://docs.graphcore.ai/projects/tensorflow-user-guide/en/latest/targeting_tf2.html#ipustrategy).
 
 
 ```python
@@ -256,7 +257,7 @@ strategy = ipu.ipu_strategy.IPUStrategy()
 
 Use the `strategy.scope()` context to ensure that everything within that 
 context will be compiled for the IPU device. You should do this instead of 
-using the `tf.device` context.
+using the `tf.device` context that is used in TensorFlow1.
 
 This tutorial uses queues for handling of outfeeds.
 
@@ -301,46 +302,3 @@ Index Name                         Mean         Std          Minimum      Maximu
 Single layer activations callback
 No data enqueued
 ```
-
-## Profiling and Visualising for pipelining
-
-If you execute this code with environmental variable:
-```bash
-POPLAR_ENGINE_OPTIONS='{"autoReport.all":"true"}'
-```
-
-For example like this:
-```bash
-POPLAR_ENGINE_OPTIONS='{"autoReport.all":"true"}' python3 mnist.py
-```
-
-Or set this variable inside Jupyter Notebook:
-```python
-import os
-os.environ['POPLAR_ENGINE_OPTIONS']='{"autoReport.all":"true"}'
-```
-
-Then you could use the generated report, which for this tutorial might look
-like this:
-```bash
-ls .
-```
-> ./tf_report__2021-10-06__02-24-24.631__70052:
-> archive.a
-> debug.cbor
-> framework.json
-> profile.pop
-> profile.pop_cache
-
-## PopVision - reading the reports
-
-When you open such a report, you could navigate to multiple reports.
-Here you can see example views generated for a set of parameters in this
-tutorial: pipelining enabled, for 2 IPUs with gradient accumulation enabled.
-
-![Execution Trace](static/popvision_multiple_ipus.png)
-
-Also when you go to the Operations Summary and in the top left corner you 
-select Tensorflow Layer, you can observe that SGD and gradient accumulation
-was performed.
-![Execution Trace](static/enabled_gradient_accumulator_and_SGD.png)

@@ -109,7 +109,7 @@ if args.outfeed_pre_accumulated_gradients:
         args.outfeed_pre_accumulated_gradients
 
 steps_per_epoch = args.steps_per_epoch
-steps_per_execution - steps_per_epoch
+steps_per_execution = steps_per_epoch
 epochs = args.epochs
 
 activations_filters = args.activations_filters

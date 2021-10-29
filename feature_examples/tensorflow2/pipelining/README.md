@@ -196,17 +196,9 @@ is still running, and it does not release IPU devices automatically.
 
 
 ```python
-def configure_ipus(
-        num_ipus: int,
-        selection_order: Optional[ipu.utils.SelectionOrder] = None
-) -> ipu.config.IPUConfig:
-
+def configure_ipus(num_ipus: int):
     ipu_configuration = ipu.config.IPUConfig()
     ipu_configuration.auto_select_ipus = num_ipus
-
-    if selection_order:
-        ipu_configuration.selection_order = selection_order
-
     ipu_configuration.configure_ipu_system()
 ```
 
@@ -405,7 +397,7 @@ which is used to create a model-parallel execution when calling `fit()`,
 >on this model.
 
 Below you will see pipeline stage assignment like this: `[0, 0, 0, 0, 1, 1])`. 
-This means that first two layers of `Sequential` model are assigned to 
+This means that first four layers of `Sequential` model are assigned to 
 the first stage, and the remaining layers to the second stage.
 
 This list has to be has to be of the same length as the total number
@@ -541,6 +533,8 @@ ls .
 When you open such a report, you could navigate to multiple tabs which present
 different aspects of the IPU computation. You can find more information on the
 [PopVision User Guide](https://docs.graphcore.ai/projects/graphcore-popvision-user-guide/en/latest/index.html) page.
+
+## Further reading
 
 For further reading about related topics please check:
 - [Keras API docs](https://docs.graphcore.ai/projects/tensorflow-user-guide/en/latest/api.html#keras)

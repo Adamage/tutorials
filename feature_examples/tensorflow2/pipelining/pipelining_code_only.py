@@ -53,17 +53,9 @@ def create_dataset(batch_size: int, repeat=True):
 
 train_ds = create_dataset(batch_size=BATCH_SIZE)
 
-def configure_ipus(
-        num_ipus: int,
-        selection_order: Optional[ipu.utils.SelectionOrder] = None
-) -> ipu.config.IPUConfig:
-
+def configure_ipus(num_ipus: int):
     ipu_configuration = ipu.config.IPUConfig()
     ipu_configuration.auto_select_ipus = num_ipus
-
-    if selection_order:
-        ipu_configuration.selection_order = selection_order
-
     ipu_configuration.configure_ipu_system()
 
 def train(strategy,

@@ -6,12 +6,12 @@ and gradients) can be returned to the host via outfeeds for inspection.
 
 An outfeed is the counterpart to an infeed and manages the transfer of data 
 (like tensors, tuples or dictionaries of tensors) from the IPU to the host. 
-Too learn more about using outfeeds, see [outfeed queues](https://docs.graphcore.ai/projects/tensorflow-user-guide/en/latest/api.html#outfeed-queue).
+To learn more about using outfeeds, see [outfeed queues](https://docs.graphcore.ai/projects/tensorflow-user-guide/en/latest/api.html#outfeed-queue).
 
 Outfeeds can be useful for debugging, but can significantly increase the amount
 of memory required on the IPU(s). When pipelining, you could use a smaller
 value for the gradient accumulation count to mitigate this. Also consider using
-a small number of [steps per execution[(https://github.com/tensorflow/tensorflow/blob/master/tensorflow/python/keras/engine/training.py#L537)
+a small number of [steps per execution](https://github.com/tensorflow/tensorflow/blob/master/tensorflow/python/keras/engine/training.py#L537)
 to reduce memory footprint. 
 
 In this demo, filters can be used to return only a subset of the activations
